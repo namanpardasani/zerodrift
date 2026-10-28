@@ -11,5 +11,8 @@
   },
   "devDependencies": {
     "fast-check": "^4.10.2"
+  },
+  "dependencies": {
+    "zod": "^4.6.7"
   }
 }

@@ -37,6 +37,7 @@ export async function startLedger(opts: LedgerAppOptions): Promise<RunningLedger
     LedgerModule.forRoot({ db, holdSweepIntervalSeconds: opts.holdSweepIntervalSeconds ?? 10 }),
     opts.port,
     'ledger',
+    { silent: opts.logLevel === 'silent' },
   );
   const port = (app.getHttpServer().address() as AddressInfo).port;
   return {

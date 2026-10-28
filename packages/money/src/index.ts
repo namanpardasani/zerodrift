@@ -4,6 +4,8 @@
  * `number`s silently lose precision above 2^53.
  */
 
+import { z } from 'zod';
+
 export type Minor = bigint;
 
 /** Postgres BIGINT max; ledger amounts must fit so they round-trip to the database safely. */
@@ -64,3 +66,14 @@ export function formatInr(amount: Minor): string {
 
 /** JSON.stringify cannot serialise bigint; amounts cross the wire as decimal strings. */
 export const minorToString = (m: Minor): string => m.toString();
+
+/**
+ * Zod schema for an amount in an HTTP body: an integer string ("12500") or safe integer (12500),
+ * becoming a positive bigint. Floats, negatives, zero and overflow are rejected. Shared so every
+ * service validates money identically.
+ */
+export const minorAmountSchema = z
+  .union([z.string().regex(/^\d+$/, 'must be an integer in minor units'), z.number().int().safe()])
+  .transform((v) => BigInt(v))
+  .refine((v) => v > 0n, 'must be greater than zero')
+  .refine((v) => v <= MAX_MINOR, 'exceeds maximum');

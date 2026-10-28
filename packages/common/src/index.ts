@@ -84,8 +84,8 @@ export function correlationMiddleware(req: Request, res: Response, next: NextFun
 }
 
 /** Boot a Nest app with the shared middleware and graceful shutdown. */
-export async function bootstrap(module: AppModuleRef, port: number, service: string) {
-  const app: INestApplication = await NestFactory.create(module, { logger: ['error', 'warn', 'log'] });
+export async function bootstrap(module: AppModuleRef, port: number, service: string, opts: { silent?: boolean } = {}) {
+  const app: INestApplication = await NestFactory.create(module, { logger: opts.silent ? false : ['error', 'warn', 'log'] });
   app.use(correlationMiddleware);
   app.enableShutdownHooks(); // SIGTERM (k8s pod kill) lets in-flight requests finish
   await app.listen(port, '0.0.0.0');

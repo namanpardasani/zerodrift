@@ -169,3 +169,15 @@ describe('concurrency', () => {
     await expectInvariants(t);
   });
 });
+
+describe('get-or-create under contention', () => {
+  it('40 concurrent createAccount calls for the same owner all succeed and return one account', async () => {
+    const t0 = Date.now();
+    const { ok, errors } = await settle(Array.from({ length: 40 }, () => t.ledger.createAccount({ ownerType: 'customer', ownerId: 'same-owner' })));
+    expect(errors).toEqual([]);
+    expect(new Set(ok.map((a) => a.id)).size).toBe(1);
+    expect(Date.now() - t0).toBeLessThan(2_000);
+    const n = await t.db.selectFrom('accounts').select('id').where('owner_id', '=', 'same-owner').execute();
+    expect(n).toHaveLength(1);
+  });
+});

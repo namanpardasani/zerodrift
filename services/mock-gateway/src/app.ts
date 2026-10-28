@@ -50,7 +50,7 @@ export async function startGateway(opts: GatewayAppOptions): Promise<RunningGate
   })
   class GatewayModule {}
 
-  const app = await bootstrap(GatewayModule, opts.port, 'mock-gateway');
+  const app = await bootstrap(GatewayModule, opts.port, 'mock-gateway', { silent: opts.logLevel === 'silent' });
   const port = (app.getHttpServer().address() as AddressInfo).port;
   return {
     app,

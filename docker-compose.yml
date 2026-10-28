@@ -89,9 +89,18 @@ services:
     <<: *service
     build: { context: ., args: { SERVICE: payments } }
     ports: ['3002:3002']
+    depends_on:
+      postgres: { condition: service_healthy }
+      ledger: { condition: service_started }
+      mock-gateway: { condition: service_started }
     environment:
       NODE_ENV: development
       DATABASE_URL: postgres://zerodrift:zerodrift@postgres:5432/payments
+      LEDGER_URL: http://ledger:3001
+      GATEWAY_URL: http://mock-gateway:3005
+      PUBLIC_URL: http://payments:3002
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-admin-token}
+      GATEWAY_CALLBACK_SECRET: ${GATEWAY_CALLBACK_SECRET:-dev-gateway-secret}
 
   webhook:
     <<: *service
