@@ -1,5 +1,5 @@
 import 'reflect-metadata';
-import { Controller, Get, Module, ServiceUnavailableException, type INestApplication } from '@nestjs/common';
+import { Controller, Get, Header, Module, ServiceUnavailableException, type INestApplication } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { randomUUID } from 'node:crypto';
 import type { NextFunction, Request, Response } from 'express';
@@ -56,7 +56,9 @@ export function createHealthModule(service: string, checks: HealthCheck[] = []) 
       return { status: 'ready', service, checks: results };
     }
 
+    // Prometheus rejects scrapes that are not served as its exposition content type.
     @Get('metrics')
+    @Header('Content-Type', registry.contentType)
     async metrics() {
       return registry.metrics();
     }
