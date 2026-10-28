@@ -1,0 +1,36 @@
+# Node / pnpm
+node_modules/
+.pnpm-store/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+npm-debug.log*
+pnpm-debug.log*
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Docker
+docker-compose.override.yml
+.docker/
+
+# IDE / OS
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+.DS_Store
+Thumbs.db
+
+# Test / tooling output
+playwright-report/
+test-results/
+.vitest/
+k6-results/
+screenshots/tmp/
+
+# Claude local state
+.claude/settings.local.json
