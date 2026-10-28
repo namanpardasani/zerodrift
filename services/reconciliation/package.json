@@ -9,7 +9,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "node dist/main.js",
     "dev": "tsx watch src/main.ts",
-    "test": "vitest run --passWithNoTests --config ../../vitest.config.ts"
+    "test": "vitest run --passWithNoTests --config ../../vitest.config.mts"
   },
   "dependencies": {
     "@zerodrift/config": "workspace:*",

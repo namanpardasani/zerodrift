@@ -7,7 +7,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run --passWithNoTests --config ../../vitest.config.ts"
+    "test": "vitest run --passWithNoTests --config ../../vitest.config.mts"
   },
   "devDependencies": {
     "fast-check": "^4.10.2"

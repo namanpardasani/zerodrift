@@ -1,6 +1,8 @@
 import 'reflect-metadata';
 import { Controller, Get, Header, Module, ServiceUnavailableException, type INestApplication } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+
+type AppModuleRef = Parameters<typeof NestFactory.create>[0];
 import { randomUUID } from 'node:crypto';
 import type { NextFunction, Request, Response } from 'express';
 import pino, { type Logger } from 'pino';
@@ -81,7 +83,7 @@ export function correlationMiddleware(req: Request, res: Response, next: NextFun
 }
 
 /** Boot a Nest app with the shared middleware and graceful shutdown. */
-export async function bootstrap(module: new () => unknown, port: number, service: string) {
+export async function bootstrap(module: AppModuleRef, port: number, service: string) {
   const app: INestApplication = await NestFactory.create(module, { logger: ['error', 'warn', 'log'] });
   app.use(correlationMiddleware);
   app.enableShutdownHooks(); // SIGTERM (k8s pod kill) lets in-flight requests finish
