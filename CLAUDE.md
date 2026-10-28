@@ -6,7 +6,7 @@ After any session/context reset, re-read both and continue from the next unfinis
 ## Rules (summary of brief section 0)
 - Build phase by phase (brief section 7) without asking, except: the Phase 10 design pause; anything that costs money or needs the user's accounts/credentials; anything destructive outside this repo or irreversible; a real blocker after trying reasonable alternatives (explain options, recommend one).
 - Otherwise decide yourself and record the decision and reasons in NOTES.md.
-- One LOCAL git commit at the end of each phase. Never push, never add a remote.
+- One git commit at the end of each phase. The user later asked for everything to be pushed to their GitHub repo regularly: push after each phase commit once the remote exists (never commit secrets or tokens).
 - Update the NOTES.md Progress log after every phase: done, next, known issues.
 - Quality bar: one-command run, passing tests, no TODO stubs in finished phases, no fake data or invented numbers.
 - Verify library versions/maintenance instead of guessing. Free tools only.
