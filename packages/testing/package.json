@@ -1,0 +1,30 @@
+{
+  "name": "@zerodrift/testing",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "echo no tests"
+  },
+  "dependencies": {
+    "@testcontainers/postgresql": "^12.2.1",
+    "@zerodrift/db": "workspace:*",
+    "testcontainers": "^12.2.1"
+  },
+  "peerDependencies": {
+    "vitest": "*"
+  },
+  "devDependencies": {
+    "vitest": "*"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  }
+}

@@ -1,10 +1,6 @@
 import 'reflect-metadata';
-import { bootstrap, createLogger } from '@zerodrift/common';
 import { loadConfig, z } from '@zerodrift/config';
-import { createDb, createPool, migrateToLatest } from '@zerodrift/db';
-import * as path from 'node:path';
-import type { LedgerDB } from './db-schema.js';
-import { LedgerModule } from './ledger.module.js';
+import { startLedger } from './app.js';
 
 const config = loadConfig(
   {
@@ -16,24 +12,14 @@ const config = loadConfig(
   { SERVICE_NAME: 'ledger', PORT: '3001', ...process.env },
 );
 
-async function main() {
-  const log = createLogger(config.SERVICE_NAME, config.LOG_LEVEL);
-  const pool = createPool(config.DATABASE_URL, config.DB_POOL_MAX);
-  const db = createDb<LedgerDB>(pool);
-
-  if (config.MIGRATE_ON_BOOT) {
-    const applied = await migrateToLatest(db, path.join(__dirname, 'migrations'));
-    log.info({ applied }, 'migrations complete');
-  }
-
-  await bootstrap(
-    LedgerModule.forRoot({ db, holdSweepIntervalSeconds: config.HOLD_SWEEP_INTERVAL_SECONDS }),
-    config.PORT,
-    config.SERVICE_NAME,
-  );
-}
-
-main().catch((err) => {
+startLedger({
+  databaseUrl: config.DATABASE_URL,
+  port: config.PORT,
+  migrate: config.MIGRATE_ON_BOOT,
+  poolMax: config.DB_POOL_MAX,
+  holdSweepIntervalSeconds: config.HOLD_SWEEP_INTERVAL_SECONDS,
+  logLevel: config.LOG_LEVEL,
+}).catch((err) => {
   console.error(err);
   process.exit(1);
 });

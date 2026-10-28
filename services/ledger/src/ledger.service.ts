@@ -242,6 +242,29 @@ export class LedgerService {
   }
 
   /**
+   * Generic balanced posting for callers that need an entry shape the dedicated endpoints do not
+   * cover (e.g. a refund that is funded partly by the merchant and partly by the fees account).
+   * Same guarantees as everything else: balanced, locked in order, idempotent, no overdraft.
+   */
+  async postTransaction(input: {
+    type: 'payment' | 'transfer' | 'refund' | 'fee';
+    referenceId?: string;
+    idempotencyKey: string;
+    entries: { accountId: string; direction: 'debit' | 'credit'; amountMinor: bigint }[];
+  }): Promise<PostResult> {
+    const requestHash = hashRequest('post', { t: input.type, r: input.referenceId, e: input.entries });
+    return inTransaction(this.db, (trx) =>
+      post(trx, {
+        type: input.type,
+        referenceId: input.referenceId,
+        idempotencyKey: input.idempotencyKey,
+        requestHash,
+        entries: input.entries,
+      }),
+    );
+  }
+
+  /**
    * Reverse a whole transaction by posting the mirror image (every debit becomes a credit and vice
    * versa). The original rows are never touched. A second reversal of the same transaction is
    * rejected by the UNIQUE(reverses_transaction_id) index, even under concurrency.

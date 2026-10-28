@@ -61,3 +61,12 @@ export const entriesQuery = z.object({
 });
 
 export const idParam = id;
+
+export const postTransactionBody = z.object({
+  type: z.enum(['payment', 'transfer', 'refund', 'fee']),
+  referenceId: reference.optional(),
+  entries: z
+    .array(z.object({ accountId: id, direction: z.enum(['debit', 'credit']), amountMinor: amount }))
+    .min(2)
+    .max(20),
+});

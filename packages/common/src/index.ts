@@ -1,10 +1,11 @@
 import 'reflect-metadata';
-import { Controller, Get, Header, Module, ServiceUnavailableException, type INestApplication } from '@nestjs/common';
+import { type ArgumentsHost, Catch, Controller, type ExceptionFilter, Get, Header, HttpException, Logger as NestLogger, Module, ServiceUnavailableException, type INestApplication } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 
 type AppModuleRef = Parameters<typeof NestFactory.create>[0];
 import { randomUUID } from 'node:crypto';
 import type { NextFunction, Request, Response } from 'express';
+import { ZodError } from 'zod';
 import pino, { type Logger } from 'pino';
 import { Counter, Registry, collectDefaultMetrics } from 'prom-client';
 
@@ -90,4 +91,94 @@ export async function bootstrap(module: AppModuleRef, port: number, service: str
   await app.listen(port, '0.0.0.0');
   createLogger(service).info({ port }, 'listening');
   return app;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Errors
+// ---------------------------------------------------------------------------------------------
+
+/** Domain errors carry a stable machine-readable `code` and the HTTP status they map to. */
+export class DomainError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+    readonly status: number,
+    readonly details?: Record<string, unknown>,
+  ) {
+    super(message);
+  }
+}
+
+/** One error shape for every service: { error: { code, message, details? } }. */
+@Catch()
+export class ErrorFilter implements ExceptionFilter {
+  private readonly log = new NestLogger('ErrorFilter');
+
+  catch(err: unknown, host: ArgumentsHost) {
+    const res = host.switchToHttp().getResponse<Response>();
+    if (err instanceof DomainError) {
+      if (err.status === 429 && typeof err.details?.retryAfterSeconds === 'number') {
+        res.setHeader('Retry-After', String(err.details.retryAfterSeconds));
+      }
+      return res.status(err.status).json({ error: { code: err.code, message: err.message, details: err.details } });
+    }
+    if (err instanceof ZodError) {
+      return res.status(400).json({
+        error: {
+          code: 'validation_error',
+          message: 'Invalid request',
+          details: err.issues.map((i) => ({ path: i.path.join('.'), message: i.message })),
+        },
+      });
+    }
+    if (err instanceof HttpException) {
+      return res.status(err.getStatus()).json({ error: { code: 'http_error', message: err.message } });
+    }
+    this.log.error(err instanceof Error ? (err.stack ?? err.message) : String(err));
+    return res.status(500).json({ error: { code: 'internal_error', message: 'Internal server error' } });
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Retry with exponential backoff + full jitter
+// ---------------------------------------------------------------------------------------------
+
+export interface BackoffOptions {
+  baseMs: number;
+  maxMs: number;
+  /** Injectable for tests; defaults to Math.random. */
+  random?: () => number;
+}
+
+/**
+ * Delay before retry number `attempt` (0-based): a random value in [0, min(maxMs, baseMs * 2^attempt)].
+ * "Full jitter": the exponential term spreads load as failures persist, and the randomness stops a
+ * crowd of clients that failed together from retrying together (a thundering herd).
+ */
+export function backoffDelayMs(attempt: number, { baseMs, maxMs, random = Math.random }: BackoffOptions): number {
+  const ceiling = Math.min(maxMs, baseMs * 2 ** attempt);
+  return Math.min(ceiling, Math.floor(random() * (ceiling + 1)));
+}
+
+export interface RetryOptions extends BackoffOptions {
+  /** Number of RETRIES after the first attempt (total attempts = retries + 1). */
+  retries: number;
+  /** Return false for errors that can never succeed on retry (e.g. validation). Default: retry all. */
+  shouldRetry?: (err: unknown) => boolean;
+  onRetry?: (err: unknown, attempt: number, delayMs: number) => void;
+  sleep?: (ms: number) => Promise<void>;
+}
+
+export async function retry<T>(fn: (attempt: number) => Promise<T>, opts: RetryOptions): Promise<T> {
+  const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn(attempt);
+    } catch (err) {
+      if (attempt >= opts.retries || (opts.shouldRetry && !opts.shouldRetry(err))) throw err;
+      const delay = backoffDelayMs(attempt, opts);
+      opts.onRetry?.(err, attempt + 1, delay);
+      await sleep(delay);
+    }
+  }
 }

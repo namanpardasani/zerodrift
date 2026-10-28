@@ -29,6 +29,15 @@
     "@testcontainers/postgresql": "^12.2.1",
     "@types/express": "^5.0.6",
     "fast-check": "^4.10.2",
+    "@zerodrift/testing": "workspace:*",
     "testcontainers": "^12.2.1"
+  },
+  "exports": {
+    ".": "./dist/main.js",
+    "./app": {
+      "types": "./dist/app.d.ts",
+      "default": "./dist/app.js"
+    },
+    "./package.json": "./package.json"
   }
 }

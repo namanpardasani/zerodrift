@@ -113,7 +113,12 @@ services:
     restart: unless-stopped
     build: { context: ., args: { SERVICE: mock-gateway } }
     ports: ['3005:3005']
-    environment: { NODE_ENV: development }
+    depends_on: { postgres: { condition: service_healthy } }
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgres://zerodrift:zerodrift@postgres:5432/gateway
+      # lets the gateway create its database on first boot even if the volume predates it
+      ADMIN_DATABASE_URL: postgres://zerodrift:zerodrift@postgres:5432/postgres
 
   chaos-controller:
     restart: unless-stopped

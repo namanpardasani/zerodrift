@@ -328,6 +328,39 @@ describe('holds', () => {
   });
 });
 
+describe('generic posting (used for refunds)', () => {
+  it('posts a multi-source refund shape and rejects unbalanced ones', async () => {
+    const merchant = await t.wallet('gp-m', 1_000n, 'merchant');
+    const customer = await t.wallet('gp-c');
+    const feesId = await t.ledger.systemAccountId(t.db, 'fees');
+    await t.ledger.transfer({ fromAccountId: merchant, toAccountId: feesId, amountMinor: 100n, idempotencyKey: t.key() }); // seed fees
+    const r = await t.ledger.postTransaction({
+      type: 'refund',
+      idempotencyKey: t.key(),
+      entries: [
+        { accountId: merchant, direction: 'debit', amountMinor: 480n },
+        { accountId: feesId, direction: 'debit', amountMinor: 20n },
+        { accountId: customer, direction: 'credit', amountMinor: 500n },
+      ],
+    });
+    expect(r.transaction.entries).toHaveLength(3);
+    expect((await t.balance(customer)).available).toBe(500n);
+    expect(
+      await code(
+        t.ledger.postTransaction({
+          type: 'refund',
+          idempotencyKey: t.key(),
+          entries: [
+            { accountId: merchant, direction: 'debit', amountMinor: 10n },
+            { accountId: customer, direction: 'credit', amountMinor: 11n },
+          ],
+        }),
+      ),
+    ).toBe('validation_error');
+    await expectInvariants(t);
+  });
+});
+
 describe('HTTP API', () => {
   const post = (path: string, body: unknown, key?: string) =>
     fetch(`${t.baseUrl}${path}`, {

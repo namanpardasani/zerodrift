@@ -1,8 +1,7 @@
 import { type DynamicModule, Module, type OnApplicationBootstrap, Inject, type OnApplicationShutdown } from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
-import { createHealthModule } from '@zerodrift/common';
+import { ErrorFilter, createHealthModule } from '@zerodrift/common';
 import { sql } from 'kysely';
-import { ErrorFilter } from './filters.js';
 import { HoldsService } from './holds.service.js';
 import { InvariantsService } from './invariants.service.js';
 import { LedgerController } from './ledger.controller.js';

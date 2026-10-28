@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { NestFactory } from '@nestjs/core';
 import { createDb, createPool } from '@zerodrift/db';
-import { inject } from 'vitest';
+import { createTestDatabase } from '@zerodrift/testing';
 import type { LedgerDB } from '../src/db-schema.js';
 import { HoldsService } from '../src/holds.service.js';
 import { InvariantsService } from '../src/invariants.service.js';
@@ -12,15 +12,8 @@ const migrations = import.meta.glob<{ up: (db: any) => Promise<void> }>('../src/
 
 /** A fully wired ledger on its own fresh database, plus an HTTP base URL. */
 export async function createTestLedger() {
-  const adminUri = inject('pgAdminUri');
-  const dbName = `t_${randomUUID().replace(/-/g, '')}`;
-  const admin = createPool(adminUri, 1);
-  await admin.query(`CREATE DATABASE ${dbName}`);
-  await admin.end();
-
-  const url = new URL(adminUri);
-  url.pathname = `/${dbName}`;
-  const pool = createPool(url.toString(), 60);
+  const { url } = await createTestDatabase();
+  const pool = createPool(url, 60);
   const db = createDb<LedgerDB>(pool);
   for (const key of Object.keys(migrations).sort()) await migrations[key]!.up(db);
 

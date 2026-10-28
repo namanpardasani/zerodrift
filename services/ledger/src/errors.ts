@@ -1,14 +1,6 @@
-/** Domain errors carry a stable machine-readable `code` and the HTTP status they map to. */
-export class DomainError extends Error {
-  constructor(
-    readonly code: string,
-    message: string,
-    readonly status: number,
-    readonly details?: Record<string, unknown>,
-  ) {
-    super(message);
-  }
-}
+import { DomainError } from '@zerodrift/common';
+
+export { DomainError };
 
 export const Errors = {
   validation: (msg: string, details?: Record<string, unknown>) => new DomainError('validation_error', msg, 400, details),

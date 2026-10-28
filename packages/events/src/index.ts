@@ -68,3 +68,27 @@ export function parseEvent(raw: unknown): { envelope: EventEnvelope; type: Event
   const payload = eventPayloads[type].parse(envelope.payload);
   return { envelope, type, payload };
 }
+
+/**
+ * Build a validated envelope for an event. Producers call this when writing to the outbox, so an
+ * invalid payload fails at write time (in the producer's transaction) and never reaches Kafka.
+ */
+export function makeEvent<T extends EventType>(
+  type: T,
+  aggregateType: string,
+  aggregateId: string,
+  payload: EventPayload<T>,
+  opts: { eventId?: string; correlationId?: string; occurredAt?: Date } = {},
+): EventEnvelope {
+  eventPayloads[type].parse(payload);
+  return envelopeSchema.parse({
+    eventId: opts.eventId ?? crypto.randomUUID(),
+    eventType: type,
+    schemaVersion: 1,
+    aggregateType,
+    aggregateId,
+    occurredAt: (opts.occurredAt ?? new Date()).toISOString(),
+    correlationId: opts.correlationId,
+    payload,
+  });
+}

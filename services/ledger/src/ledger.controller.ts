@@ -64,6 +64,13 @@ export class LedgerController {
     return r.transaction;
   }
 
+  @Post('transactions')
+  async postTransaction(@Body() body: unknown, @Headers('idempotency-key') key: string | undefined, @Res({ passthrough: true }) res: Response) {
+    const r = await this.ledger.postTransaction({ ...parse(s.postTransactionBody, body), idempotencyKey: requireKey(key) });
+    status(res, r.replayed);
+    return r.transaction;
+  }
+
   @Post('transactions/:id/reverse')
   async reverse(
     @Param('id') id: string,

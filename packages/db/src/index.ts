@@ -35,3 +35,21 @@ export async function migrateToLatest(db: Kysely<any>, migrationFolder: string):
 
 export { sql } from 'kysely';
 export type { Kysely, Transaction } from 'kysely';
+
+/**
+ * Create `name` if it does not exist, using an admin connection to the server. Lets a service own
+ * its database even when the Postgres volume predates it (init scripts only run on an empty volume).
+ */
+export async function ensureDatabase(adminUrl: string, name: string): Promise<void> {
+  if (!/^[a-z_][a-z0-9_]*$/.test(name)) throw new Error(`Unsafe database name: ${name}`);
+  const pool = new Pool({ connectionString: adminUrl, max: 1 });
+  try {
+    const { rowCount } = await pool.query('SELECT 1 FROM pg_database WHERE datname = $1', [name]);
+    if (!rowCount) await pool.query(`CREATE DATABASE ${name}`);
+  } catch (err) {
+    // Two replicas booting together can both pass the check; the loser gets duplicate_database.
+    if ((err as { code?: string }).code !== '42P04') throw err;
+  } finally {
+    await pool.end();
+  }
+}

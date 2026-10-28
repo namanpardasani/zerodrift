@@ -10,8 +10,9 @@ declare module 'vitest' {
 }
 
 /**
- * Start ONE real Postgres for the whole run (each test file then creates its own database in it).
- * Set TEST_PG_ADMIN_URI to reuse an existing server instead (handy when Docker pulls are slow).
+ * Vitest globalSetup: start ONE real Postgres for the whole test run; each test file then creates
+ * its own database inside it (see createTestDatabase). Set TEST_PG_ADMIN_URI to reuse an existing
+ * server instead of starting a container (handy when image pulls are slow).
  */
 export async function setup(project: TestProject) {
   if (process.env.TEST_PG_ADMIN_URI) {
@@ -22,7 +23,7 @@ export async function setup(project: TestProject) {
     .withUsername('test')
     .withPassword('test')
     .withDatabase('postgres')
-    .withCommand(['postgres', '-c', 'max_connections=300', '-c', 'fsync=off'])
+    .withCommand(['postgres', '-c', 'max_connections=400', '-c', 'fsync=off'])
     .start();
   project.provide('pgAdminUri', container.getConnectionUri());
 }

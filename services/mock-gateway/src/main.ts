@@ -1,14 +1,25 @@
 import 'reflect-metadata';
-import { Module } from '@nestjs/common';
-import { bootstrap, createHealthModule } from '@zerodrift/common';
-import { loadConfig } from '@zerodrift/config';
+import { loadConfig, z } from '@zerodrift/config';
+import { startGateway } from './app.js';
 
-const config = loadConfig({}, { SERVICE_NAME: 'mock-gateway', PORT: '3005', ...process.env });
+const config = loadConfig(
+  {
+    DATABASE_URL: z.string().min(1),
+    /** Optional: lets the gateway create its own database on first boot. */
+    ADMIN_DATABASE_URL: z.string().optional(),
+    GATEWAY_CALLBACK_SECRET: z.string().default('dev-gateway-secret'),
+  },
+  { SERVICE_NAME: 'mock-gateway', PORT: '3005', ...process.env },
+);
 
-@Module({ imports: [createHealthModule(config.SERVICE_NAME)] })
-class AppModule {}
-
-bootstrap(AppModule, config.PORT, config.SERVICE_NAME).catch((err) => {
+startGateway({
+  databaseUrl: config.DATABASE_URL,
+  adminDatabaseUrl: config.ADMIN_DATABASE_URL,
+  databaseName: new URL(config.DATABASE_URL).pathname.slice(1),
+  port: config.PORT,
+  callbackSecret: config.GATEWAY_CALLBACK_SECRET,
+  logLevel: config.LOG_LEVEL,
+}).catch((err) => {
   console.error(err);
   process.exit(1);
 });
