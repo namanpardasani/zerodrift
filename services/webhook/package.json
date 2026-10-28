@@ -6,10 +6,10 @@
   "types": "dist/main.d.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.test.json",
     "start": "node dist/main.js",
     "dev": "tsx watch src/main.ts",
-    "test": "vitest run --passWithNoTests --config ../../vitest.config.mts"
+    "test": "vitest run"
   },
   "dependencies": {
     "@zerodrift/config": "workspace:*",
@@ -21,6 +21,30 @@
     "rxjs": "^7.8.2",
     "@zerodrift/db": "workspace:*",
     "kysely": "^0.29.7",
-    "pg": "^8.23.1"
+    "pg": "^8.23.1",
+    "@zerodrift/events": "workspace:*",
+    "@zerodrift/kafka": "workspace:*",
+    "@zerodrift/webhooks": "workspace:*",
+    "zod": "^4.6.7",
+    "prom-client": "^15.1.3"
+  },
+  "devDependencies": {
+    "@zerodrift/testing": "workspace:*",
+    "@zerodrift/ledger": "workspace:*",
+    "@zerodrift/mock-gateway": "workspace:*",
+    "@zerodrift/payments": "workspace:*",
+    "vitest": "*",
+    "fast-check": "*",
+    "@types/express": "*",
+    "@types/pg": "*",
+    "@zerodrift/demo-receiver": "workspace:*"
+  },
+  "exports": {
+    ".": "./dist/main.js",
+    "./app": {
+      "types": "./dist/app.d.ts",
+      "default": "./dist/app.js"
+    },
+    "./package.json": "./package.json"
   }
 }

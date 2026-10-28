@@ -108,9 +108,20 @@ services:
     <<: *service
     build: { context: ., args: { SERVICE: webhook } }
     ports: ['3003:3003']
+    depends_on:
+      postgres: { condition: service_healthy }
+      kafka: { condition: service_healthy }
+      payments: { condition: service_started }
     environment:
       NODE_ENV: development
       DATABASE_URL: postgres://zerodrift:zerodrift@postgres:5432/webhook
+      PAYMENTS_URL: http://payments:3002
+      KAFKA_BROKERS: kafka:9092
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-admin-token}
+      # DEV-ONLY key (base64 of 32 bytes). Generate your own for anything real: openssl rand -base64 32
+      WEBHOOK_ENCRYPTION_KEY: ${WEBHOOK_ENCRYPTION_KEY:-emVyb2RyaWZ0LWRldi1vbmx5LWtleS0zMmJ5dGVzISE=}
+      # the demo receiver lives on the private compose network; never enable this in production
+      ALLOW_PRIVATE_WEBHOOK_URLS: 'true'
 
   reconciliation:
     <<: *service
@@ -130,6 +141,12 @@ services:
       DATABASE_URL: postgres://zerodrift:zerodrift@postgres:5432/gateway
       # lets the gateway create its database on first boot even if the volume predates it
       ADMIN_DATABASE_URL: postgres://zerodrift:zerodrift@postgres:5432/postgres
+
+  demo-receiver:
+    restart: unless-stopped
+    build: { context: ., args: { SERVICE: demo-receiver } }
+    ports: ['3007:3007']
+    environment: { NODE_ENV: development, PORT: '3007' }
 
   chaos-controller:
     restart: unless-stopped

@@ -1,0 +1,22 @@
+{
+  "name": "@zerodrift/demo-receiver",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/main.js",
+  "types": "dist/main.d.ts",
+  "exports": {
+    ".": "./dist/main.js",
+    "./app": { "types": "./dist/receiver.d.ts", "default": "./dist/receiver.js" },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/main.js",
+    "dev": "tsx watch src/main.ts",
+    "test": "vitest run --passWithNoTests --config ../../vitest.config.mts"
+  },
+  "dependencies": {
+    "@zerodrift/webhooks": "workspace:*"
+  }
+}

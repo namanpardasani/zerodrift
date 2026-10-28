@@ -313,6 +313,15 @@ importers:
         specifier: '*'
         version: 5.0.5(@opentelemetry/api@1.10.0)(@types/node@24.19.2)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
+  packages/webhooks:
+    devDependencies:
+      fast-check:
+        specifier: ^4.10.2
+        version: 4.10.2
+      vitest:
+        specifier: ^5.0.5
+        version: 5.0.5(@opentelemetry/api@1.10.0)(@types/node@24.19.2)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+
   services/chaos-controller:
     dependencies:
       '@nestjs/common':
@@ -336,6 +345,12 @@ importers:
       rxjs:
         specifier: ^7.8.2
         version: 7.8.2
+
+  services/demo-receiver:
+    dependencies:
+      '@zerodrift/webhooks':
+        specifier: workspace:*
+        version: link:../../packages/webhooks
 
   services/ledger:
     dependencies:
@@ -570,18 +585,61 @@ importers:
       '@zerodrift/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@zerodrift/events':
+        specifier: workspace:*
+        version: link:../../packages/events
+      '@zerodrift/kafka':
+        specifier: workspace:*
+        version: link:../../packages/kafka
+      '@zerodrift/webhooks':
+        specifier: workspace:*
+        version: link:../../packages/webhooks
       kysely:
         specifier: ^0.29.7
         version: 0.29.7
       pg:
         specifier: ^8.23.1
         version: 8.23.1
+      prom-client:
+        specifier: ^15.1.3
+        version: 15.1.3
       reflect-metadata:
         specifier: ^0.2.2
         version: 0.2.2
       rxjs:
         specifier: ^7.8.2
         version: 7.8.2
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
+    devDependencies:
+      '@types/express':
+        specifier: '*'
+        version: 5.0.6
+      '@types/pg':
+        specifier: '*'
+        version: 8.23.1
+      '@zerodrift/demo-receiver':
+        specifier: workspace:*
+        version: link:../demo-receiver
+      '@zerodrift/ledger':
+        specifier: workspace:*
+        version: link:../ledger
+      '@zerodrift/mock-gateway':
+        specifier: workspace:*
+        version: link:../mock-gateway
+      '@zerodrift/payments':
+        specifier: workspace:*
+        version: link:../payments
+      '@zerodrift/testing':
+        specifier: workspace:*
+        version: link:../../packages/testing
+      fast-check:
+        specifier: '*'
+        version: 4.10.2
+      vitest:
+        specifier: '*'
+        version: 5.0.5(@opentelemetry/api@1.10.0)(@types/node@24.19.2)(vite@8.3.5(@types/node@24.19.2)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
 
 packages:
 

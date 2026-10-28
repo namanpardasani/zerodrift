@@ -1,36 +1,50 @@
 import 'reflect-metadata';
-import { Module } from '@nestjs/common';
-import { bootstrap, createHealthModule, createLogger } from '@zerodrift/common';
 import { loadConfig, z } from '@zerodrift/config';
-import { createDb, createPool, migrateToLatest, sql } from '@zerodrift/db';
-import * as path from 'node:path';
+import { parseEncryptionKey } from '@zerodrift/webhooks';
+import { startWebhook } from './app.js';
+import { PaymentsAuthenticator } from './auth.js';
+import { DEFAULT_WEBHOOK_CONFIG } from './config.js';
 
-const config = loadConfig(
-  { DATABASE_URL: z.string().min(1), MIGRATE_ON_BOOT: z.stringbool().default(true) },
+const env = loadConfig(
+  {
+    DATABASE_URL: z.string().min(1),
+    PAYMENTS_URL: z.string().url(),
+    /** base64 of 32 random bytes: `openssl rand -base64 32`. No default on purpose in production. */
+    WEBHOOK_ENCRYPTION_KEY: z.string().min(1),
+    ADMIN_TOKEN: z.string().min(8).default(DEFAULT_WEBHOOK_CONFIG.adminToken),
+    KAFKA_BROKERS: z.string().optional(),
+    WEBHOOK_TIMEOUT_MS: z.coerce.number().int().positive().default(DEFAULT_WEBHOOK_CONFIG.timeoutMs),
+    WEBHOOK_MAX_ATTEMPTS: z.coerce.number().int().positive().default(DEFAULT_WEBHOOK_CONFIG.maxAttempts),
+    WEBHOOK_BACKOFF_BASE_MS: z.coerce.number().int().positive().default(DEFAULT_WEBHOOK_CONFIG.backoffBaseMs),
+    WEBHOOK_BACKOFF_MAX_MS: z.coerce.number().int().positive().default(DEFAULT_WEBHOOK_CONFIG.backoffMaxMs),
+    /** Dev/demo only: allow webhook URLs on private networks (e.g. the demo receiver). */
+    ALLOW_PRIVATE_WEBHOOK_URLS: z.stringbool().default(false),
+    DB_POOL_MAX: z.coerce.number().int().positive().default(20),
+  },
   { SERVICE_NAME: 'webhook', PORT: '3003', ...process.env },
 );
 
-async function main() {
-  const log = createLogger(config.SERVICE_NAME, config.LOG_LEVEL);
-  const pool = createPool(config.DATABASE_URL);
-  const db = createDb<unknown>(pool);
-
-  if (config.MIGRATE_ON_BOOT) {
-    const applied = await migrateToLatest(db, path.join(__dirname, 'migrations'));
-    log.info({ applied }, 'migrations complete');
-  }
-
-  const Health = createHealthModule(config.SERVICE_NAME, [
-    { name: 'postgres', check: async () => void (await sql`select 1`.execute(db)) },
-  ]);
-
-  @Module({ imports: [Health] })
-  class AppModule {}
-
-  await bootstrap(AppModule, config.PORT, config.SERVICE_NAME);
+if (env.NODE_ENV === 'production' && env.ALLOW_PRIVATE_WEBHOOK_URLS) {
+  throw new Error('ALLOW_PRIVATE_WEBHOOK_URLS must not be enabled in production (SSRF)');
 }
 
-main().catch((err) => {
+startWebhook({
+  databaseUrl: env.DATABASE_URL,
+  port: env.PORT,
+  poolMax: env.DB_POOL_MAX,
+  logLevel: env.LOG_LEVEL,
+  authenticator: new PaymentsAuthenticator(env.PAYMENTS_URL),
+  kafkaBrokers: env.KAFKA_BROKERS?.split(',').map((b) => b.trim()).filter(Boolean),
+  config: {
+    encryptionKey: parseEncryptionKey(env.WEBHOOK_ENCRYPTION_KEY),
+    adminToken: env.ADMIN_TOKEN,
+    timeoutMs: env.WEBHOOK_TIMEOUT_MS,
+    maxAttempts: env.WEBHOOK_MAX_ATTEMPTS,
+    backoffBaseMs: env.WEBHOOK_BACKOFF_BASE_MS,
+    backoffMaxMs: env.WEBHOOK_BACKOFF_MAX_MS,
+    allowPrivateUrls: env.ALLOW_PRIVATE_WEBHOOK_URLS,
+  },
+}).catch((err) => {
   console.error(err);
   process.exit(1);
 });
