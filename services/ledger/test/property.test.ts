@@ -36,7 +36,7 @@ const opArb: fc.Arbitrary<Op> = fc.oneof(
       k: fc.constant('transfer' as const),
       f: fc.nat(W - 1),
       t: fc.nat(W - 1),
-      amt: fc.integer({ min: 1, max: 4_000 }),
+      amt: fc.integer({ min: 1, max: 9_000 }), // can exceed a wallet's funds, so rejections occur too
       bps: fc.oneof(fc.constant(0), fc.integer({ min: 1, max: 1_000 })),
     }),
   },
@@ -47,7 +47,8 @@ const opArb: fc.Arbitrary<Op> = fc.oneof(
       k: fc.constant('capture' as const),
       h: fc.nat(50),
       to: fc.nat(W - 1),
-      pct: fc.integer({ min: 1, max: 100 }),
+      // ~1/3 full captures, the rest partial; a flat 1..100 would almost never produce a full one
+      pct: fc.oneof(fc.constant(100), fc.integer({ min: 1, max: 99 }), fc.integer({ min: 1, max: 99 })),
       bps: fc.oneof(fc.constant(0), fc.integer({ min: 1, max: 1_000 })),
     }),
   },
