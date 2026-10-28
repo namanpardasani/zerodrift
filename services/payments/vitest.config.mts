@@ -1,1 +1,1 @@
-export { default } from '../../vitest.integration.mjs';
+export { default } from '../../vitest.kafka.mjs';

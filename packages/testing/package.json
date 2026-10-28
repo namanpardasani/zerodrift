@@ -10,6 +10,7 @@
     "test": "echo no tests"
   },
   "dependencies": {
+    "@testcontainers/kafka": "^12.2.1",
     "@testcontainers/postgresql": "^12.2.1",
     "@zerodrift/db": "workspace:*",
     "testcontainers": "^12.2.1"

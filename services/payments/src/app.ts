@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import type { INestApplication } from '@nestjs/common';
 import { bootstrap, createLogger } from '@zerodrift/common';
 import { createDb, createPool, migrateToLatest } from '@zerodrift/db';
+import { type OutboxRelay, startOutboxRelay } from '@zerodrift/kafka';
 import { GatewayClient, type GatewayClientOptions } from './clients/gateway.client.js';
 import { LedgerClient } from './clients/ledger.client.js';
 import type { PaymentsDB } from './db-schema.js';
@@ -23,6 +24,8 @@ export interface PaymentsAppOptions {
   migrate?: boolean;
   poolMax?: number;
   recoveryScheduler?: boolean;
+  /** Kafka bootstrap servers. Omit to run without publishing events (events still accumulate in the outbox). */
+  kafkaBrokers?: string[];
   logLevel?: string;
 }
 
@@ -33,6 +36,7 @@ export interface RunningPayments {
   gateway: GatewayClient;
   ledger: LedgerClient;
   config: PaymentsConfig;
+  relay?: OutboxRelay;
   close: () => Promise<void>;
 }
 
@@ -69,6 +73,9 @@ export async function startPayments(opts: PaymentsAppOptions): Promise<RunningPa
   const port = (app.getHttpServer().address() as AddressInfo).port;
   // With port 0 (tests) the real port is only known now; default the callback address to ourselves.
   if (!opts.publicUrl) gateway.setCallbackUrl(`http://127.0.0.1:${port}/internal/gateway-callback`);
+  const relay = opts.kafkaBrokers?.length
+    ? startOutboxRelay({ db, brokers: opts.kafkaBrokers, service: 'payments', lockId: 74_002, log: (m, x) => log.info(x ?? {}, m) })
+    : undefined;
   return {
     app,
     url: `http://127.0.0.1:${port}`,
@@ -76,7 +83,9 @@ export async function startPayments(opts: PaymentsAppOptions): Promise<RunningPa
     gateway,
     ledger,
     config,
+    relay,
     close: async () => {
+      await relay?.stop();
       await app.close();
       gateway.shutdown();
       await pool.end();

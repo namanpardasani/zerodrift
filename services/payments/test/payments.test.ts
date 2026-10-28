@@ -113,7 +113,13 @@ describe('idempotency', () => {
     const odd = results.filter((r) => ![200, 201, 202, 409, 503].includes(r.status)).map((r) => `${r.status}:${JSON.stringify(r.body)}`);
     expect(odd, 'unexpected responses').toEqual([]);
 
-    await recover(); // finish anything that was left unknown
+    // Converge: under load the original request may still hold the payment's lease, in which case
+    // recovery (correctly) skips it, so keep nudging until it settles.
+    await waitFor(async () => {
+      await recover();
+      const r = await s.payments.db.selectFrom('payments').select('status').where('customer_id', '=', c).execute();
+      return r.length === 1 && r[0]!.status === 'succeeded';
+    }, 30_000, 250);
     const rows = await s.payments.db.selectFrom('payments').select(['id', 'status']).where('customer_id', '=', c).execute();
     expect(rows).toHaveLength(1);
     expect(rows[0]!.status).toBe('succeeded');

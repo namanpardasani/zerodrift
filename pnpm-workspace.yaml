@@ -9,3 +9,4 @@ allowBuilds:
   cpu-features: false
   protobufjs: false
   ssh2: false
+  "@confluentinc/kafka-javascript": true

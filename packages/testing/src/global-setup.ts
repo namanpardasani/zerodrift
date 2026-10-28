@@ -3,12 +3,6 @@ import type { TestProject } from 'vitest/node';
 
 let container: StartedPostgreSqlContainer | undefined;
 
-declare module 'vitest' {
-  export interface ProvidedContext {
-    pgAdminUri: string;
-  }
-}
-
 /**
  * Vitest globalSetup: start ONE real Postgres for the whole test run; each test file then creates
  * its own database inside it (see createTestDatabase). Set TEST_PG_ADMIN_URI to reuse an existing

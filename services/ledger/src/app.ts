@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import type { INestApplication } from '@nestjs/common';
 import { bootstrap, createLogger } from '@zerodrift/common';
 import { createDb, createPool, migrateToLatest } from '@zerodrift/db';
+import { type OutboxRelay, startOutboxRelay } from '@zerodrift/kafka';
 import type { LedgerDB } from './db-schema.js';
 import { LedgerModule } from './ledger.module.js';
 
@@ -14,6 +15,8 @@ export interface LedgerAppOptions {
   migrate?: boolean;
   poolMax?: number;
   holdSweepIntervalSeconds?: number;
+  /** Kafka bootstrap servers. Omit to run without publishing events (events still accumulate in the outbox). */
+  kafkaBrokers?: string[];
   logLevel?: string;
 }
 
@@ -21,6 +24,7 @@ export interface RunningLedger {
   app: INestApplication;
   pool: ReturnType<typeof createPool>;
   url: string;
+  relay?: OutboxRelay;
   close: () => Promise<void>;
 }
 
@@ -40,11 +44,16 @@ export async function startLedger(opts: LedgerAppOptions): Promise<RunningLedger
     { silent: opts.logLevel === 'silent' },
   );
   const port = (app.getHttpServer().address() as AddressInfo).port;
+  const relay = opts.kafkaBrokers?.length
+    ? startOutboxRelay({ db, brokers: opts.kafkaBrokers, service: 'ledger', lockId: 74_001, log: (m, x) => log.info(x ?? {}, m) })
+    : undefined;
   return {
     app,
     pool,
     url: `http://127.0.0.1:${port}`,
+    relay,
     close: async () => {
+      await relay?.stop();
       await app.close();
       await pool.end();
     },

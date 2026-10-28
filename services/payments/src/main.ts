@@ -18,6 +18,8 @@ const config = loadConfig(
     RECOVERY_ABANDON_AFTER_SECONDS: z.coerce.number().int().min(0).default(DEFAULT_CONFIG.recoveryAbandonAfterSeconds),
     MIGRATE_ON_BOOT: z.stringbool().default(true),
     DB_POOL_MAX: z.coerce.number().int().positive().default(20),
+    /** Comma-separated Kafka brokers. Unset = do not publish events. */
+    KAFKA_BROKERS: z.string().optional(),
   },
   { SERVICE_NAME: 'payments', PORT: '3002', ...process.env },
 );
@@ -30,6 +32,7 @@ startPayments({
   publicUrl: config.PUBLIC_URL,
   migrate: config.MIGRATE_ON_BOOT,
   poolMax: config.DB_POOL_MAX,
+  kafkaBrokers: config.KAFKA_BROKERS?.split(',').map((b) => b.trim()).filter(Boolean),
   gatewayClient: { timeoutMs: config.GATEWAY_TIMEOUT_MS },
   logLevel: config.LOG_LEVEL,
   config: {

@@ -64,12 +64,12 @@ export interface ApiOptions { key?: string | null; idempotencyKey?: string | nul
 export type Api = (path: string, opts?: ApiOptions) => Promise<{ status: number; body: any; headers: Headers }>;
 
 /** Real ledger + real mock-gateway + real payments service, all in-process, on real Postgres. */
-export async function startStack(overrides: Partial<PaymentsAppOptions> = {}): Promise<Stack> {
+export async function startStack(overrides: Partial<PaymentsAppOptions> = {}, kafkaBrokers?: string[]): Promise<Stack> {
   const ledgerDb = await createTestDatabase();
   const gatewayDb = await createTestDatabase();
   const paymentsDb = await createTestDatabase();
 
-  const ledger = await startLedger({ databaseUrl: ledgerDb.url, port: 0, holdSweepIntervalSeconds: 0, logLevel: 'silent' });
+  const ledger = await startLedger({ databaseUrl: ledgerDb.url, port: 0, holdSweepIntervalSeconds: 0, logLevel: 'silent', kafkaBrokers });
   const gateway = await startGateway({ databaseUrl: gatewayDb.url, port: 0, logLevel: 'silent' });
   const ledgerProxy = await startToggleProxy(ledger.url);
 
@@ -79,6 +79,7 @@ export async function startStack(overrides: Partial<PaymentsAppOptions> = {}): P
     ledgerUrl: ledgerProxy.url,
     gatewayUrl: gateway.url,
     recoveryScheduler: false, // tests trigger the recovery job explicitly
+    kafkaBrokers,
     logLevel: 'silent',
     ledgerTimeoutMs: 3_000, // generous: ledger, gateway and payments share one event loop in tests
     config: { recoveryStuckAfterSeconds: 0, leaseSeconds: 5, holdTtlSeconds: 600, recoveryAbandonAfterSeconds: 300 },

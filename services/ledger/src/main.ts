@@ -8,6 +8,8 @@ const config = loadConfig(
     MIGRATE_ON_BOOT: z.stringbool().default(true),
     DB_POOL_MAX: z.coerce.number().int().positive().default(20),
     HOLD_SWEEP_INTERVAL_SECONDS: z.coerce.number().int().min(0).default(10),
+    /** Comma-separated Kafka brokers. Unset = do not publish events. */
+    KAFKA_BROKERS: z.string().optional(),
   },
   { SERVICE_NAME: 'ledger', PORT: '3001', ...process.env },
 );
@@ -18,6 +20,7 @@ startLedger({
   migrate: config.MIGRATE_ON_BOOT,
   poolMax: config.DB_POOL_MAX,
   holdSweepIntervalSeconds: config.HOLD_SWEEP_INTERVAL_SECONDS,
+  kafkaBrokers: config.KAFKA_BROKERS?.split(',').map((b) => b.trim()).filter(Boolean),
   logLevel: config.LOG_LEVEL,
 }).catch((err) => {
   console.error(err);

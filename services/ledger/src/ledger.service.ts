@@ -1,5 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { DEFAULT_CURRENCY } from '@zerodrift/config';
+import { makeEvent } from '@zerodrift/events';
+import { emitEvent } from '@zerodrift/kafka';
 import { feeFor } from '@zerodrift/money';
 import { sql } from 'kysely';
 import type { AccountType, OwnerType } from './db-schema.js';
@@ -225,7 +227,7 @@ export class LedgerService {
     return inTransaction(this.db, async (trx) => {
       const fee = input.feeBps ? feeFor(input.amountMinor, input.feeBps) : 0n;
       const feeAccountId = fee > 0n ? (input.feeAccountId ?? (await this.systemAccountId(trx, 'fees'))) : undefined;
-      return post(trx, {
+      const result = await post(trx, {
         type: 'transfer',
         referenceId: input.referenceId,
         idempotencyKey: input.idempotencyKey,
@@ -238,6 +240,21 @@ export class LedgerService {
           feeAccountId,
         }),
       });
+      // Announce it in the SAME transaction (outbox). A replay posted nothing new, so it emits nothing:
+      // one transfer, one event, however many times the client retried.
+      if (!result.replayed) {
+        await emitEvent(
+          trx,
+          makeEvent('transfer.completed', 'transfer', result.transaction.id, {
+            transactionId: result.transaction.id,
+            fromAccountId: input.fromAccountId,
+            toAccountId: input.toAccountId,
+            amountMinor: input.amountMinor.toString(),
+            currency: 'INR',
+          }),
+        );
+      }
+      return result;
     });
   }
 
