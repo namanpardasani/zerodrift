@@ -1,0 +1,26 @@
+{
+  "name": "@zerodrift/reconciliation",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/main.js",
+  "types": "dist/main.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/main.js",
+    "dev": "tsx watch src/main.ts",
+    "test": "vitest run --passWithNoTests --config ../../vitest.config.ts"
+  },
+  "dependencies": {
+    "@zerodrift/config": "workspace:*",
+    "@zerodrift/common": "workspace:*",
+    "@nestjs/common": "^12.3.2",
+    "@nestjs/core": "^12.3.2",
+    "@nestjs/platform-express": "^12.3.2",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
+    "@zerodrift/db": "workspace:*",
+    "kysely": "^0.29.7",
+    "pg": "^8.23.1"
+  }
+}
