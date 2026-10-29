@@ -62,6 +62,13 @@ export class EndpointsService {
     return rows.map((r) => view(r));
   }
 
+  /** Operator view across merchants (secrets are never included). */
+  async listAll(merchantId?: string): Promise<(EndpointView & { merchantId: string })[]> {
+    let q = this.db.selectFrom('webhook_endpoints').selectAll().orderBy('created_at', 'desc').limit(500);
+    if (merchantId) q = q.where('merchant_id', '=', merchantId);
+    return (await q.execute()).map((r) => ({ ...view(r), merchantId: r.merchant_id }));
+  }
+
   /** 404 (not 403) for someone else's endpoint, so ids of other merchants are never confirmed. */
   async getOwned(merchantId: string, id: string): Promise<EndpointRow> {
     const row = await this.db.selectFrom('webhook_endpoints').selectAll().where('id', '=', id).where('merchant_id', '=', merchantId).executeTakeFirst();

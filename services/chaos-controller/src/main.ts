@@ -1,14 +1,30 @@
 import 'reflect-metadata';
-import { Module } from '@nestjs/common';
-import { bootstrap, createHealthModule } from '@zerodrift/common';
-import { loadConfig } from '@zerodrift/config';
+import { chaosEnabled, loadConfig, z } from '@zerodrift/config';
+import { startChaos } from './app.js';
 
-const config = loadConfig({}, { SERVICE_NAME: 'chaos-controller', PORT: '3006', ...process.env });
+const env = loadConfig(
+  {
+    CHAOS_ENABLED: z.stringbool().default(false),
+    ADMIN_TOKEN: z.string().min(8).default('dev-admin-token'),
+    DOCKER_SOCKET: z.string().default('/var/run/docker.sock'),
+    COMPOSE_PROJECT: z.string().default('zerodrift'),
+    GATEWAY_URL: z.string().url().default('http://mock-gateway:3005'),
+    TOXIPROXY_URL: z.string().url().default('http://toxiproxy:8474'),
+  },
+  { SERVICE_NAME: 'chaos-controller', PORT: '3006', ...process.env },
+);
 
-@Module({ imports: [createHealthModule(config.SERVICE_NAME)] })
-class AppModule {}
-
-bootstrap(AppModule, config.PORT, config.SERVICE_NAME).catch((err) => {
+startChaos({
+  port: env.PORT,
+  nodeEnv: env.NODE_ENV,
+  chaosEnabled: env.CHAOS_ENABLED && chaosEnabled({ ...process.env, CHAOS_ENABLED: String(env.CHAOS_ENABLED) }),
+  adminToken: env.ADMIN_TOKEN,
+  dockerSocketPath: env.DOCKER_SOCKET,
+  composeProject: env.COMPOSE_PROJECT,
+  gatewayUrl: env.GATEWAY_URL,
+  toxiproxyUrl: env.TOXIPROXY_URL,
+  logLevel: env.LOG_LEVEL,
+}).catch((err) => {
   console.error(err);
   process.exit(1);
 });

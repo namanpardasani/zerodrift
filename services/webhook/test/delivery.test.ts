@@ -308,6 +308,25 @@ describe('API security', () => {
     expect((await env.api(`/v1/webhook-endpoints/${ep.id}`, { key: b.key, method: 'PATCH', body: { active: false } })).status).toBe(404);
   });
 
+  it('operator view: details, replay and endpoint listing across merchants (admin token)', async () => {
+    const m = env.merchant();
+    const ep = await env.createEndpoint(m);
+    const eventId = await env.enqueue(m);
+    await env.pump();
+    const id = (await onlyDelivery(eventId)).id;
+    const admin = (path: string, init: RequestInit = {}) => fetch(`${env.webhook.url}${path}`, { ...init, headers: { 'content-type': 'application/json', 'x-admin-token': env.webhook.config.adminToken } }).then(async (r) => ({ status: r.status, body: (await r.json()) as any }));
+
+    const d = await admin(`/admin/webhook-deliveries/${id}`);
+    expect(d.status).toBe(200);
+    expect(d.body.attempts).toHaveLength(1);
+    const replay = await admin(`/admin/webhook-deliveries/${id}/replay`, { method: 'POST', body: '{}' });
+    expect(replay.body.replayCount).toBe(1);
+    const eps = await admin(`/admin/webhook-endpoints?merchantId=${m.id}`);
+    expect(eps.body.endpoints.map((e: { id: string }) => e.id)).toEqual([ep.id]);
+    expect(JSON.stringify(eps.body)).not.toContain(ep.secret); // secrets never leave
+    expect((await fetch(`${env.webhook.url}/admin/webhook-deliveries/${id}`)).status).toBe(401);
+  });
+
   it('validates input and the admin API needs the admin token', async () => {
     const m = env.merchant();
     expect((await env.api('/v1/webhook-endpoints', { key: m.key, body: { url: 'not a url' } })).status).toBe(400);

@@ -361,6 +361,30 @@ describe('generic posting (used for refunds)', () => {
   });
 });
 
+describe('transaction feed', () => {
+  it('pages ascending by default and newest-first with order=desc, each row exactly once', async () => {
+    const a = await t.wallet('feed-a', 10_000n);
+    const b = await t.wallet('feed-b');
+    for (let i = 0; i < 6; i++) await t.ledger.transfer({ fromAccountId: a, toAccountId: b, amountMinor: BigInt(10 + i), idempotencyKey: t.key() });
+    const all = async (desc: boolean) => {
+      const ids: string[] = [];
+      let after: string | undefined;
+      for (;;) {
+        const q = new URLSearchParams({ type: 'transfer', limit: '2', ...(desc ? { order: 'desc' } : {}), ...(after ? { after } : {}) });
+        const r = await (await fetch(`${t.baseUrl}/internal/transactions?${q}`)).json();
+        ids.push(...r.transactions.map((x: { id: string }) => x.id));
+        if (!r.nextCursor) return ids;
+        after = r.nextCursor;
+      }
+    };
+    const asc = await all(false);
+    const desc = await all(true);
+    expect(new Set(asc).size).toBe(asc.length);
+    expect(asc.length).toBeGreaterThanOrEqual(6);
+    expect(desc).toEqual([...asc].reverse());
+  });
+});
+
 describe('HTTP API', () => {
   const post = (path: string, body: unknown, key?: string) =>
     fetch(`${t.baseUrl}${path}`, {

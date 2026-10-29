@@ -1,0 +1,25 @@
+{
+  "name": "@zerodrift/demo-shop",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/main.js",
+  "types": "dist/main.d.ts",
+  "exports": {
+    ".": "./dist/main.js",
+    "./app": { "types": "./dist/shop.d.ts", "default": "./dist/shop.js" },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.test.json",
+    "start": "node dist/main.js",
+    "dev": "tsx watch src/main.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@zerodrift/webhooks": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "*"
+  }
+}

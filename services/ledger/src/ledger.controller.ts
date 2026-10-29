@@ -137,7 +137,7 @@ export class LedgerController {
   @Get('internal/transactions')
   async listTransactions(@Query() q: unknown) {
     const p = parse(s.listTransactionsQuery, q);
-    return this.ledger.listTransactions({ type: p.type, from: p.from ? new Date(p.from) : undefined, to: p.to ? new Date(p.to) : undefined, after: p.after, limit: p.limit });
+    return this.ledger.listTransactions({ type: p.type, from: p.from ? new Date(p.from) : undefined, to: p.to ? new Date(p.to) : undefined, after: p.after, limit: p.limit, desc: p.order === 'desc' });
   }
 
   @Get('internal/invariants')

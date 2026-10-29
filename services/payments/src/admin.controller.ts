@@ -1,8 +1,9 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { Body, Controller, Get, HttpCode, Inject, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Inject, Param, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import * as s from './http.schemas.js';
 import { AdminGuard, MerchantsService } from './merchants.service.js';
+import { AdminQueries } from './admin-queries.js';
 import { ReconciliationFeed } from './reconciliation-feed.js';
 import { RecoveryService } from './recovery.service.js';
 import { SagaService } from './saga.service.js';
@@ -17,6 +18,7 @@ export class AdminController {
     private readonly merchants: MerchantsService,
     private readonly recovery: RecoveryService,
     private readonly feed: ReconciliationFeed,
+    private readonly queries: AdminQueries,
   ) {}
 
   @Post('admin/merchants')
@@ -31,6 +33,24 @@ export class AdminController {
   @UseGuards(AdminGuard)
   async listMerchants() {
     return { merchants: await this.merchants.list() };
+  }
+
+  @Get('admin/payments')
+  @UseGuards(AdminGuard)
+  async adminPayments(@Query() q: Record<string, string>) {
+    return { payments: await this.queries.list({ status: q.status, merchantId: q.merchantId, before: q.before, limit: q.limit ? Number(q.limit) : undefined }) };
+  }
+
+  @Get('admin/payments/:id')
+  @UseGuards(AdminGuard)
+  async adminPayment(@Param('id') id: string) {
+    return this.queries.get(s.uuid.parse(id));
+  }
+
+  @Get('admin/stats')
+  @UseGuards(AdminGuard)
+  async adminStats() {
+    return this.queries.stats();
   }
 
   /** Read-only feed for the reconciliation service: payments (with refunds and ledger links) in a time window. */

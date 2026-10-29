@@ -70,6 +70,7 @@ export function paymentEventBase(p: PaymentRow) {
     customerId: p.customer_id,
     amountMinor: p.amount_minor.toString(),
     currency: p.currency.trim(),
+    ...(p.reference ? { reference: p.reference } : {}),
   };
 }
 

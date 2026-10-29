@@ -234,8 +234,11 @@ export class DeliveriesService {
     return (await q.execute()).map((r) => this.toView(r));
   }
 
-  async getOwned(merchantId: string, id: string): Promise<DeliveryView> {
-    const r = await this.baseQuery().where('d.id', '=', id).where('ep.merchant_id', '=', merchantId).executeTakeFirst();
+  /** `merchantId` scopes the lookup to one merchant; omit it for the operator view. */
+  async getOwned(merchantId: string | undefined, id: string): Promise<DeliveryView> {
+    let q = this.baseQuery().where('d.id', '=', id);
+    if (merchantId) q = q.where('ep.merchant_id', '=', merchantId);
+    const r = await q.executeTakeFirst();
     if (!r) throw new DomainError('not_found', `Webhook delivery ${id} not found`, 404);
     const attempts = await this.db.selectFrom('webhook_attempts').selectAll().where('delivery_id', '=', id).orderBy('attempt_no').execute();
     return {
@@ -250,7 +253,7 @@ export class DeliveriesService {
    * a new retry cycle starts. Replaying an already-successful delivery is allowed on purpose
    * (receivers dedupe on the event id header).
    */
-  async replay(merchantId: string, id: string): Promise<DeliveryView> {
+  async replay(merchantId: string | undefined, id: string): Promise<DeliveryView> {
     await this.getOwned(merchantId, id);
     await this.db
       .updateTable('webhook_deliveries')

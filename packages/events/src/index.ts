@@ -31,6 +31,8 @@ const payment = {
   customerId: z.string(),
   amountMinor: amount,
   currency: z.string().length(3),
+  /** The merchant's own reference (e.g. their order id), echoed back so webhooks can be matched to orders. Optional: added in a backward-compatible way. */
+  reference: z.string().optional(),
 };
 
 export const eventPayloads = {

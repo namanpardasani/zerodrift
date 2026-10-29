@@ -79,11 +79,30 @@ export class WebhookController {
 @Controller('admin')
 @UseGuards(AdminGuard)
 export class WebhookAdminController {
-  constructor(private readonly deliveries: DeliveriesService) {}
+  constructor(
+    private readonly deliveries: DeliveriesService,
+    private readonly endpointsSvc: EndpointsService,
+  ) {}
 
   @Get('webhook-deliveries')
   async list(@Query() q: unknown) {
     return { deliveries: await this.deliveries.list(parse(s.listDeliveriesQuery, q)) };
+  }
+
+  @Get('webhook-deliveries/:id')
+  async get(@Param('id') id: string) {
+    return this.deliveries.getOwned(undefined, parse(s.uuid, id));
+  }
+
+  @Post('webhook-deliveries/:id/replay')
+  @HttpCode(200)
+  async replay(@Param('id') id: string) {
+    return this.deliveries.replay(undefined, parse(s.uuid, id));
+  }
+
+  @Get('webhook-endpoints')
+  async endpoints(@Query('merchantId') merchantId?: string) {
+    return { endpoints: await this.endpointsSvc.listAll(merchantId) };
   }
 
   @Get('webhook-stats')

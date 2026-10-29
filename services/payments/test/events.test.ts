@@ -47,7 +47,7 @@ async function customer(funds = 50_000n) {
   await s.api(`/v1/customers/${id}/topups`, { key: M.apiKey, idempotencyKey: `tu-${uid()}`, body: { amountMinor: funds.toString() } });
   return id;
 }
-const pay = (customerId: string, amount: number) => s.api('/v1/payments', { key: M.apiKey, idempotencyKey: `pay-${uid()}`, body: { customerId, amountMinor: String(amount) } });
+const pay = (customerId: string, amount: number, reference?: string) => s.api('/v1/payments', { key: M.apiKey, idempotencyKey: `pay-${uid()}`, body: { customerId, amountMinor: String(amount), ...(reference ? { reference } : {}) } });
 
 describe('events reach Kafka', () => {
   it('a successful payment emits payment.created then payment.succeeded, in order, on one partition, schema-valid', async () => {
@@ -65,6 +65,16 @@ describe('events reach Kafka', () => {
       expect(e.topic).toBe(TOPICS.payments);
     }
     expect(evs[1]!.envelope.payload).toMatchObject({ paymentId: p.id, merchantId: M.id, customerId: c, amountMinor: '4000', currency: 'INR' });
+  });
+
+  it("events echo the merchant's own reference so webhooks can be matched to orders", async () => {
+    const ref = `order-${uid()}`;
+    const p = (await pay(await customer(), 1_000, ref)).body;
+    await waitFor(async () => (typesFor(p.id).length >= 2 ? true : false), 15_000);
+    for (const e of eventsFor(p.id)) expect(e.envelope.payload).toMatchObject({ reference: ref });
+    const plain = (await pay(await customer(), 1_000)).body; // no reference given: the field is simply absent (old shape still valid)
+    await waitFor(async () => (typesFor(plain.id).length >= 2 ? true : false), 15_000);
+    expect(eventsFor(plain.id)[0]!.envelope.payload).not.toHaveProperty('reference');
   });
 
   it('a declined payment emits payment.failed with the reason', async () => {

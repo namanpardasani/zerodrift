@@ -437,6 +437,38 @@ describe('auth and tenancy', () => {
   });
 });
 
+describe('operator (admin) read API', () => {
+  const admin = (path: string) => fetch(`${s.payments.url}${path}`, { headers: { 'x-admin-token': s.payments.config.adminToken } }).then(async (r) => ({ status: r.status, body: (await r.json()) as any }));
+
+  it('lists and shows payments across merchants, with timeline, refunds and merchant name; needs the admin token', async () => {
+    const c = await customer(10_000n);
+    const p = (await pay(c, 2_000)).body;
+    await s.api(`/v1/payments/${p.id}/refunds`, { key: M.apiKey, idempotencyKey: `ref-${uid()}`, body: { amountMinor: '500' } });
+
+    expect((await fetch(`${s.payments.url}/admin/payments`)).status).toBe(401);
+    expect((await fetch(`${s.payments.url}/admin/stats`)).status).toBe(401);
+
+    const list = await admin(`/admin/payments?merchantId=${M.id}&limit=5`);
+    expect(list.status).toBe(200);
+    const row = list.body.payments.find((x: { id: string }) => x.id === p.id);
+    expect(row).toMatchObject({ status: 'partially_refunded', merchantId: M.id });
+    expect(row.merchantName).toBeTruthy();
+
+    const one = await admin(`/admin/payments/${p.id}`);
+    expect(one.body.events.map((e: { toStatus: string }) => e.toStatus)).toEqual(['created', 'processing', 'succeeded', 'partially_refunded']);
+    expect(one.body.refunds).toHaveLength(1);
+    expect(one.body.ledgerTxId).toBeTruthy();
+    expect((await admin('/admin/payments/00000000-0000-4000-8000-000000000000')).status).toBe(404);
+
+    const failedOnly = await admin(`/admin/payments?status=failed&merchantId=${M.id}`);
+    expect(failedOnly.body.payments.every((x: { status: string }) => x.status === 'failed')).toBe(true);
+
+    const stats = await admin('/admin/stats');
+    expect(stats.body.byStatus.partially_refunded).toBeGreaterThanOrEqual(1);
+    expect(stats.body.inFlight).toHaveProperty('count');
+  });
+});
+
 describe('recovery housekeeping', () => {
   it('closes an idempotency key left in_progress by a request that died after the payment settled', async () => {
     const c = await customer(5_000n);

@@ -322,15 +322,15 @@ export class LedgerService {
    * Read-only feed for the reconciliation service (which must not read this database directly).
    * Keyset-paged by (created_at, id): stable even while new transactions keep arriving.
    */
-  async listTransactions(q: { type?: string; from?: Date; to?: Date; after?: string; limit?: number }): Promise<{ transactions: TransactionView[]; nextCursor: string | null }> {
+  async listTransactions(q: { type?: string; from?: Date; to?: Date; after?: string; limit?: number; desc?: boolean }): Promise<{ transactions: TransactionView[]; nextCursor: string | null }> {
     const limit = Math.min(q.limit ?? 500, 2_000);
     // The cursor carries the timestamp as exact text: Postgres has microsecond precision but a JS Date
     // only milliseconds, and a truncated cursor would re-return the row it came from.
     let query = this.db
       .selectFrom('ledger_transactions')
       .select(['id', 'response', sql<string>`to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`.as('ts')])
-      .orderBy('created_at')
-      .orderBy('id')
+      .orderBy('created_at', q.desc ? 'desc' : 'asc')
+      .orderBy('id', q.desc ? 'desc' : 'asc')
       .limit(limit + 1);
     if (q.type) query = query.where('type', '=', q.type as never);
     if (q.from) query = query.where('created_at', '>=', q.from);
@@ -338,7 +338,7 @@ export class LedgerService {
     if (q.after) {
       const [ts, id] = q.after.split('|');
       if (!ts || !id) throw Errors.validation('bad cursor');
-      query = query.where(sql<boolean>`(created_at, id) > (${ts}::timestamptz, ${id}::uuid)`);
+      query = query.where(q.desc ? sql<boolean>`(created_at, id) < (${ts}::timestamptz, ${id}::uuid)` : sql<boolean>`(created_at, id) > (${ts}::timestamptz, ${id}::uuid)`);
     }
     const rows = await query.execute();
     const page = rows.slice(0, limit);

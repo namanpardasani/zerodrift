@@ -3,6 +3,7 @@ import { APP_FILTER } from '@nestjs/core';
 import { ErrorFilter, createHealthModule } from '@zerodrift/common';
 import { sql } from 'kysely';
 import { AdminController, GatewayCallbackController } from './admin.controller.js';
+import { AdminQueries } from './admin-queries.js';
 import { GatewayClient } from './clients/gateway.client.js';
 import { LedgerClient } from './clients/ledger.client.js';
 import { IdempotencyService } from './idempotency.service.js';
@@ -61,6 +62,7 @@ export class PaymentsModule implements OnApplicationBootstrap, OnApplicationShut
         RefundsService,
         RecoveryService,
         ReconciliationFeed,
+        AdminQueries,
       ],
     };
   }

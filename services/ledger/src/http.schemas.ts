@@ -77,4 +77,6 @@ export const listTransactionsQuery = z.object({
   to: z.string().datetime().optional(),
   after: z.string().max(100).optional(),
   limit: z.coerce.number().int().positive().max(2_000).optional(),
+  /** 'desc' = newest first (dashboards); default is oldest first (reconciliation). */
+  order: z.enum(['asc', 'desc']).optional(),
 });
