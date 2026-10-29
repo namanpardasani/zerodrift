@@ -9,6 +9,7 @@ import { type Merchant, MerchantsService } from './merchants.service.js';
 import { emit } from './outbox.js';
 import type { ApiResult } from './payments.service.js';
 import { type Db, PaymentsRepo, type RefundView, refundView } from './payments.repo.js';
+import { AuditService } from './audit.service.js';
 import { assertTransition } from './state-machine.js';
 import { DB, LEDGER } from './tokens.js';
 
@@ -36,9 +37,10 @@ export class RefundsService {
     private readonly repo: PaymentsRepo,
     private readonly idempotency: IdempotencyService,
     private readonly merchants: MerchantsService,
+    private readonly audit: AuditService,
   ) {}
 
-  async create(merchant: Merchant, paymentId: string, input: { amountMinor?: bigint; reason?: string }, key: string): Promise<ApiResult<RefundView>> {
+  async create(merchant: Merchant, paymentId: string, input: { amountMinor?: bigint; reason?: string }, key: string, ip?: string): Promise<ApiResult<RefundView>> {
     const requestHash = hashRequest('refund.create', { p: paymentId, a: input.amountMinor, r: input.reason });
 
     const created = await this.db.transaction().execute(async (trx) => {
@@ -69,6 +71,7 @@ export class RefundsService {
         .execute();
       await emit(trx, makeEvent('refund.created', 'refund', refund.id, { refundId: refund.id, paymentId: p.id, merchantId: p.merchant_id, amountMinor: amount.toString(), currency: p.currency.trim() }));
       await this.idempotency.attach(trx, merchant.id, key, refund.id);
+      await this.audit.write({ actor: `merchant:${merchant.id}`, merchantId: merchant.id, action: 'refund.created', resourceType: 'refund', resourceId: refund.id, ip, details: { paymentId: p.id, amountMinor: amount.toString() } }, trx);
       return { kind: 'created' as const, refund };
     });
 

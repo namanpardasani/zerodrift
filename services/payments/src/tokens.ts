@@ -2,6 +2,7 @@ export const DB = Symbol('PAYMENTS_DB');
 export const CONFIG = Symbol('PAYMENTS_CONFIG');
 export const LEDGER = Symbol('LEDGER_CLIENT');
 export const GATEWAY = Symbol('GATEWAY_CLIENT');
+export const RATE_LIMITER = Symbol('RATE_LIMITER');
 
 export interface PaymentsConfig {
   /** How long a hold lives. Must comfortably exceed the time recovery needs to learn the truth. */

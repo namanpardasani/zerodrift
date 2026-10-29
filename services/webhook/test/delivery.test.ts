@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { sql } from 'kysely';
 import { buildSignatureHeader } from '@zerodrift/webhooks';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { type Env, startEnv } from './helpers.js';
@@ -288,6 +289,42 @@ describe('concurrency and crashes', () => {
     } finally {
       await short.close();
     }
+  });
+});
+
+describe('audit log', () => {
+  const audit = async (action: string) => (await sql<Record<string, any>>`SELECT * FROM audit_logs WHERE action = ${action} ORDER BY created_at`.execute(env.webhook.db)).rows;
+
+  it('records endpoint changes, secret rotation and replays with the actor, and never stores a secret', async () => {
+    const m = env.merchant();
+    const ep = await env.createEndpoint(m);
+    await env.api(`/v1/webhook-endpoints/${ep.id}`, { key: m.key, method: 'PATCH', body: { description: 'renamed' } });
+    const rot = await env.api(`/v1/webhook-endpoints/${ep.id}/rotate-secret`, { key: m.key, method: 'POST', body: {} });
+    const eventId = await env.enqueue(m);
+    await env.pump();
+    const dId = (await env.deliveryRows(eventId))[0]!.id;
+    await env.api(`/v1/webhook-deliveries/${dId}/replay`, { key: m.key, method: 'POST', body: {} });
+    await env.api(`/v1/webhook-endpoints/${ep.id}`, { key: m.key, method: 'DELETE' });
+
+    const forThis = (rows: Record<string, any>[], resource: string) => rows.filter((r) => r.resource_id === resource);
+    expect(forThis(await audit('webhook_endpoint.created'), ep.id)[0]).toMatchObject({ actor: `merchant:${m.id}`, merchant_id: m.id });
+    expect(forThis(await audit('webhook_endpoint.updated'), ep.id)).toHaveLength(1);
+    expect(forThis(await audit('webhook_endpoint.secret_rotated'), ep.id)).toHaveLength(1);
+    expect(forThis(await audit('webhook_delivery.replayed'), dId)).toHaveLength(1);
+    expect(forThis(await audit('webhook_endpoint.disabled'), ep.id)).toHaveLength(1);
+
+    const everything = JSON.stringify((await sql`SELECT * FROM audit_logs`.execute(env.webhook.db)).rows);
+    expect(everything).not.toContain(ep.secret);
+    expect(everything).not.toContain(rot.body.secret);
+  });
+
+  it('is append-only and readable by operators only', async () => {
+    await expect(sql`UPDATE audit_logs SET actor = 'x'`.execute(env.webhook.db)).rejects.toThrow(/append-only/);
+    await expect(sql`DELETE FROM audit_logs`.execute(env.webhook.db)).rejects.toThrow(/append-only/);
+    expect((await fetch(`${env.webhook.url}/admin/audit-logs`)).status).toBe(401);
+    const r = await fetch(`${env.webhook.url}/admin/audit-logs?action=webhook_endpoint.created`, { headers: { 'x-admin-token': env.webhook.config.adminToken } });
+    expect(r.status).toBe(200);
+    expect(((await r.json()) as { logs: unknown[] }).logs.length).toBeGreaterThan(0);
   });
 });
 

@@ -1,5 +1,7 @@
+// Tracing must be registered BEFORE anything else loads http/pg so they can be instrumented.
+import '@zerodrift/telemetry/register';
 import 'reflect-metadata';
-import { loadConfig, z } from '@zerodrift/config';
+import { loadConfig, refuseDevSecrets, z } from '@zerodrift/config';
 import { parseEncryptionKey } from '@zerodrift/webhooks';
 import { startWebhook } from './app.js';
 import { PaymentsAuthenticator } from './auth.js';
@@ -24,6 +26,7 @@ const env = loadConfig(
   { SERVICE_NAME: 'webhook', PORT: '3003', ...process.env },
 );
 
+refuseDevSecrets(env.NODE_ENV, { ADMIN_TOKEN: env.ADMIN_TOKEN, WEBHOOK_ENCRYPTION_KEY: env.WEBHOOK_ENCRYPTION_KEY });
 if (env.NODE_ENV === 'production' && env.ALLOW_PRIVATE_WEBHOOK_URLS) {
   throw new Error('ALLOW_PRIVATE_WEBHOOK_URLS must not be enabled in production (SSRF)');
 }

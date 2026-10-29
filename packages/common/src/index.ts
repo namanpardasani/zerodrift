@@ -1,32 +1,13 @@
 import 'reflect-metadata';
-import { type ArgumentsHost, Catch, Controller, type ExceptionFilter, Get, Header, HttpException, Logger as NestLogger, Module, ServiceUnavailableException, type INestApplication } from '@nestjs/common';
-import { NestFactory } from '@nestjs/core';
-
-type AppModuleRef = Parameters<typeof NestFactory.create>[0];
-import { randomUUID } from 'node:crypto';
-import type { NextFunction, Request, Response } from 'express';
+import { type ArgumentsHost, Catch, Controller, type ExceptionFilter, Get, Header, HttpException, Logger as NestLogger, Module, ServiceUnavailableException } from '@nestjs/common';
+import type { Response } from 'express';
 import { ZodError } from 'zod';
-import pino, { type Logger } from 'pino';
-import { Counter, Registry, collectDefaultMetrics } from 'prom-client';
+import { registry } from './metrics.js';
 
-export function createLogger(service: string, level = 'info'): Logger {
-  return pino({
-    level,
-    base: { service },
-    // Never log secrets or card/PII fields, even if a caller passes them by accident.
-    redact: ['req.headers.authorization', 'req.headers["x-api-key"]', '*.password', '*.secret', '*.apiKey'],
-  });
-}
-
-/** One Prometheus registry per process, exposed at GET /metrics. */
-export const registry = new Registry();
-collectDefaultMetrics({ register: registry });
-export const httpRequests = new Counter({
-  name: 'http_requests_total',
-  help: 'HTTP requests by method, route and status',
-  labelNames: ['method', 'route', 'status'],
-  registers: [registry],
-});
+export * from './context.js';
+export * from './http.js';
+export * from './logger.js';
+export { registry } from './metrics.js';
 
 export interface HealthCheck {
   name: string;
@@ -72,26 +53,6 @@ export function createHealthModule(service: string, checks: HealthCheck[] = []) 
   return HealthModule;
 }
 
-/** Attach a correlation id to every request (reuse the caller's if present). */
-export function correlationMiddleware(req: Request, res: Response, next: NextFunction) {
-  const id = (req.headers['x-correlation-id'] as string | undefined) ?? randomUUID();
-  req.headers['x-correlation-id'] = id;
-  res.setHeader('x-correlation-id', id);
-  res.on('finish', () => {
-    httpRequests.inc({ method: req.method, route: req.route?.path ?? 'unmatched', status: res.statusCode });
-  });
-  next();
-}
-
-/** Boot a Nest app with the shared middleware and graceful shutdown. */
-export async function bootstrap(module: AppModuleRef, port: number, service: string, opts: { silent?: boolean } = {}) {
-  const app: INestApplication = await NestFactory.create(module, { logger: opts.silent ? false : ['error', 'warn', 'log'] });
-  app.use(correlationMiddleware);
-  app.enableShutdownHooks(); // SIGTERM (k8s pod kill) lets in-flight requests finish
-  await app.listen(port, '0.0.0.0');
-  createLogger(service).info({ port }, 'listening');
-  return app;
-}
 
 // ---------------------------------------------------------------------------------------------
 // Errors

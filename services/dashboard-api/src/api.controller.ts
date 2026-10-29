@@ -210,6 +210,20 @@ export class ApiController {
     return r.data;
   }
 
+  // ------------------------------------------------------------------ audit trail
+  /** Both services' append-only audit trails merged, newest first. A service being down only hides ITS entries. */
+  @Get('audit')
+  async audit(@Query() q: Record<string, string>) {
+    const qs = pick(q, ['merchantId', 'action', 'limit']);
+    const [payments, webhook] = await Promise.all([
+      this.payments.request<{ logs: Record<string, unknown>[] }>('GET', `/admin/audit-logs${qs}`).then((r) => (r.status === 200 ? r.data.logs : null)).catch(() => null),
+      this.webhook.request<{ logs: Record<string, unknown>[] }>('GET', `/admin/audit-logs${qs}`).then((r) => (r.status === 200 ? r.data.logs : null)).catch(() => null),
+    ]);
+    const tag = (rows: Record<string, unknown>[] | null, source: string) => (rows ?? []).map((l) => ({ ...l, source, at: String(l.at ?? '') }));
+    const logs = [...tag(payments, 'payments'), ...tag(webhook, 'webhook')].sort((a, b) => b.at.localeCompare(a.at));
+    return { logs: logs.slice(0, Math.min(Number(q.limit) || 100, 500)), unavailable: [...(payments ? [] : ['payments']), ...(webhook ? [] : ['webhook'])] };
+  }
+
   // ------------------------------------------------------------------ metrics
   @Get('metrics/summary')
   async metricsSummary() {

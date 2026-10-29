@@ -1,6 +1,6 @@
 import CircuitBreaker from 'opossum';
 import { Gauge, Counter } from 'prom-client';
-import { registry, retry } from '@zerodrift/common';
+import { correlationHeaders, registry, retry } from '@zerodrift/common';
 
 /**
  * The gateway timed out, was unreachable, returned 5xx, or the circuit breaker is open.
@@ -78,7 +78,7 @@ export class GatewayClient {
       async (method: string, path: string, body?: unknown) => {
         const res = await fetch(`${opts.baseUrl}${path}`, {
           method,
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': 'application/json', ...correlationHeaders() },
           body: body === undefined ? undefined : JSON.stringify(body),
           signal: AbortSignal.timeout(timeoutMs),
         });

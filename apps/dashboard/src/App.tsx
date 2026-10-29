@@ -3,6 +3,7 @@ import { Button } from '@zerodrift/ui';
 import { NavLink, Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { RequireAuth, useAuth } from './auth.js';
 import { AccountDetailPage, AccountsPage } from './pages/Accounts.js';
+import { AuditPage } from './pages/Audit.js';
 import { ChaosPage } from './pages/Chaos.js';
 import { LedgerPage } from './pages/Ledger.js';
 import { LoginPage } from './pages/Login.js';
@@ -19,6 +20,7 @@ const NAV = [
   { to: '/ledger', label: 'Ledger' },
   { to: '/webhooks', label: 'Webhooks' },
   { to: '/reconciliation', label: 'Reconciliation' },
+  { to: '/audit', label: 'Audit log' },
   { to: '/metrics', label: 'Metrics' },
   { to: '/chaos', label: 'Chaos' },
 ];
@@ -77,6 +79,7 @@ export function App() {
         <Route path="ledger" element={<LedgerPage />} />
         <Route path="webhooks" element={<WebhooksPage />} />
         <Route path="reconciliation" element={<ReconciliationPage />} />
+        <Route path="audit" element={<AuditPage />} />
         <Route path="metrics" element={<MetricsPage />} />
         <Route path="chaos" element={<ChaosPage />} />
       </Route>

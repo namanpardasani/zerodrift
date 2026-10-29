@@ -14,13 +14,17 @@
     "@zerodrift/common": "workspace:*",
     "@zerodrift/config": "workspace:*",
     "@zerodrift/events": "workspace:*",
+    "@zerodrift/telemetry": "workspace:*",
     "kysely": "^0.29.7",
     "prom-client": "^15.1.3"
   },
   "devDependencies": {
-    "@zerodrift/testing": "workspace:*",
+    "@opentelemetry/api": "^1.10.0",
+    "@opentelemetry/sdk-trace-base": "^2.12.0",
+    "@opentelemetry/sdk-trace-node": "^2.12.0",
     "@zerodrift/db": "workspace:*",
-    "vitest": "*",
-    "fast-check": "*"
+    "@zerodrift/testing": "workspace:*",
+    "fast-check": "*",
+    "vitest": "*"
   }
 }

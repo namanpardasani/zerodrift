@@ -56,7 +56,7 @@ export interface Stack {
   ledgerProxy: ToggleProxy;
   api: Api;
   merchant: { id: string; apiKey: string; ledgerAccountId: string; feeBps: number };
-  newMerchant(name?: string, feeBps?: number): Promise<Stack['merchant']>;
+  newMerchant(name?: string, feeBps?: number, rateLimitPerMin?: number): Promise<Stack['merchant']>;
   close(): Promise<void>;
 }
 
@@ -95,8 +95,8 @@ export async function startStack(overrides: Partial<PaymentsAppOptions> = {}, ka
     return { status: res.status, body: await res.json().catch(() => null), headers: res.headers };
   };
 
-  async function newMerchant(name = `merchant-${randomUUID().slice(0, 6)}`, feeBps = 250) {
-    const r = await api('/admin/merchants', { method: 'POST', body: { name, feeBps }, headers: { 'x-admin-token': payments.config.adminToken } });
+  async function newMerchant(name = `merchant-${randomUUID().slice(0, 6)}`, feeBps = 250, rateLimitPerMin?: number) {
+    const r = await api('/admin/merchants', { method: 'POST', body: { name, feeBps, ...(rateLimitPerMin ? { rateLimitPerMin } : {}) }, headers: { 'x-admin-token': payments.config.adminToken } });
     if (r.status !== 201) throw new Error(`could not create merchant: ${JSON.stringify(r.body)}`);
     return { id: r.body.id as string, apiKey: r.body.apiKey as string, ledgerAccountId: r.body.ledgerAccountId as string, feeBps };
   }

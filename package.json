@@ -16,7 +16,8 @@
     "up": "docker compose up -d --build",
     "down": "docker compose down",
     "migrate": "pnpm -r --if-present migrate",
-    "e2e:smoke": "e2e/run.sh"
+    "e2e:smoke": "e2e/run.sh",
+    "audit:deps": "node scripts/audit.mjs"
   },
   "devDependencies": {
     "@swc/core": "^1.16.20",

@@ -1,5 +1,7 @@
+// Tracing must be registered BEFORE anything else loads http/pg so they can be instrumented.
+import '@zerodrift/telemetry/register';
 import 'reflect-metadata';
-import { loadConfig, z } from '@zerodrift/config';
+import { loadConfig, refuseDevSecrets, z } from '@zerodrift/config';
 import { DEFAULT_CONFIG, startPayments } from './app.js';
 
 const config = loadConfig(
@@ -20,9 +22,13 @@ const config = loadConfig(
     DB_POOL_MAX: z.coerce.number().int().positive().default(20),
     /** Comma-separated Kafka brokers. Unset = do not publish events. */
     KAFKA_BROKERS: z.string().optional(),
+    /** Redis for per-merchant rate limiting (unset = limiting disabled). */
+    REDIS_URL: z.string().optional(),
   },
   { SERVICE_NAME: 'payments', PORT: '3002', ...process.env },
 );
+
+refuseDevSecrets(config.NODE_ENV, { ADMIN_TOKEN: config.ADMIN_TOKEN, GATEWAY_CALLBACK_SECRET: config.GATEWAY_CALLBACK_SECRET });
 
 startPayments({
   databaseUrl: config.DATABASE_URL,
@@ -32,6 +38,7 @@ startPayments({
   publicUrl: config.PUBLIC_URL,
   migrate: config.MIGRATE_ON_BOOT,
   poolMax: config.DB_POOL_MAX,
+  redisUrl: config.REDIS_URL,
   kafkaBrokers: config.KAFKA_BROKERS?.split(',').map((b) => b.trim()).filter(Boolean),
   gatewayClient: { timeoutMs: config.GATEWAY_TIMEOUT_MS },
   logLevel: config.LOG_LEVEL,

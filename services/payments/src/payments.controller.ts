@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Param, Post, Query, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Ip, Param, Post, Query, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import type { ZodType } from 'zod';
 import { LedgerClient } from './clients/ledger.client.js';
@@ -7,6 +7,7 @@ import * as s from './http.schemas.js';
 import { CurrentMerchant, type Merchant, MerchantAuthGuard } from './merchants.service.js';
 import { PaymentsService } from './payments.service.js';
 import { RefundsService } from './refunds.service.js';
+import { AuditService } from './audit.service.js';
 import { PaymentsRepo } from './payments.repo.js';
 import { Inject } from '@nestjs/common';
 import { LEDGER } from './tokens.js';
@@ -34,6 +35,7 @@ export class PaymentsController {
     private readonly payments: PaymentsService,
     private readonly refunds: RefundsService,
     private readonly repo: PaymentsRepo,
+    private readonly audit: AuditService,
     @Inject(LEDGER) private readonly ledger: LedgerClient,
   ) {}
 
@@ -44,8 +46,8 @@ export class PaymentsController {
   }
 
   @Post('payments')
-  async createPayment(@CurrentMerchant() m: Merchant, @Body() body: unknown, @Headers('idempotency-key') key: string | undefined, @Res({ passthrough: true }) res: Response) {
-    return reply(res, await this.payments.create(m, parse(s.createPaymentBody, body), requireKey(key)));
+  async createPayment(@CurrentMerchant() m: Merchant, @Body() body: unknown, @Headers('idempotency-key') key: string | undefined, @Ip() ip: string, @Res({ passthrough: true }) res: Response) {
+    return reply(res, await this.payments.create(m, parse(s.createPaymentBody, body), requireKey(key), ip));
   }
 
   @Get('payments')
@@ -64,9 +66,10 @@ export class PaymentsController {
     @Param('id') id: string,
     @Body() body: unknown,
     @Headers('idempotency-key') key: string | undefined,
+    @Ip() ip: string,
     @Res({ passthrough: true }) res: Response,
   ) {
-    return reply(res, await this.refunds.create(m, parse(s.uuid, id), parse(s.createRefundBody, body ?? {}), requireKey(key)));
+    return reply(res, await this.refunds.create(m, parse(s.uuid, id), parse(s.createRefundBody, body ?? {}), requireKey(key), ip));
   }
 
   @Get('payments/:id/refunds')
@@ -99,6 +102,7 @@ export class PaymentsController {
     @Param('customerId') customerId: string,
     @Body() body: unknown,
     @Headers('idempotency-key') key: string | undefined,
+    @Ip() ip: string,
     @Res({ passthrough: true }) res: Response,
   ) {
     const id = parse(s.createCustomerBody, { customerId }).customerId;
@@ -106,6 +110,7 @@ export class PaymentsController {
     const w = await this.ledger.wallet('customer', id);
     // scope the ledger key by merchant so two merchants can never collide on the same client key
     const r = await this.ledger.topUp({ accountId: w.id, amountMinor: input.amountMinor, idempotencyKey: `topup:${m.id}:${requireKey(key)}`, referenceId: input.reference });
+    if (r.status === 201) await this.audit.write({ actor: `merchant:${m.id}`, merchantId: m.id, action: 'wallet.topped_up', resourceType: 'customer', resourceId: id, ip, details: { amountMinor: input.amountMinor.toString() } });
     res.status(r.status);
     if (r.status === 200) res.setHeader('Idempotent-Replayed', 'true');
     return r.data;

@@ -7,6 +7,7 @@ declare module 'vitest' {
   export interface ProvidedContext {
     pgAdminUri: string;
     kafkaBrokers: string;
+    redisUrl: string;
   }
 }
 

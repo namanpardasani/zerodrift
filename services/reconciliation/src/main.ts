@@ -1,5 +1,7 @@
+// Tracing must be registered BEFORE anything else loads http/pg so they can be instrumented.
+import '@zerodrift/telemetry/register';
 import 'reflect-metadata';
-import { loadConfig, z } from '@zerodrift/config';
+import { loadConfig, refuseDevSecrets, z } from '@zerodrift/config';
 import { startReconciliation } from './app.js';
 import { DEFAULT_RECON_CONFIG } from './reconciler.service.js';
 import { createHttpSources } from './sources.js';
@@ -21,6 +23,8 @@ const env = loadConfig(
   },
   { SERVICE_NAME: 'reconciliation', PORT: '3004', ...process.env },
 );
+
+refuseDevSecrets(env.NODE_ENV, { ADMIN_TOKEN: env.ADMIN_TOKEN, PAYMENTS_ADMIN_TOKEN: env.PAYMENTS_ADMIN_TOKEN });
 
 startReconciliation({
   databaseUrl: env.DATABASE_URL,

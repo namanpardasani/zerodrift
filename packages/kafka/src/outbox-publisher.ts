@@ -98,7 +98,12 @@ export class OutboxPublisher {
         for (const r of rows.rows) {
           const topic = (this.opts.topicFor ?? topicForAggregate)(r.aggregate_type);
           const list = byTopic.get(topic) ?? [];
-          list.push({ key: r.aggregate_id, value: JSON.stringify(r.payload), headers: { 'event-id': r.id, 'event-type': r.event_type } });
+          const env = r.payload as { traceparent?: string; correlationId?: string };
+          list.push({
+            key: r.aggregate_id,
+            value: JSON.stringify(r.payload),
+            headers: { 'event-id': r.id, 'event-type': r.event_type, ...(env.traceparent ? { traceparent: env.traceparent } : {}), ...(env.correlationId ? { 'correlation-id': env.correlationId } : {}) },
+          });
           byTopic.set(topic, list);
         }
         for (const [topic, messages] of byTopic) await this.opts.producer.send({ topic, messages });

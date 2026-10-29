@@ -13,6 +13,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: 24, cache: pnpm }
       - run: pnpm install --frozen-lockfile
+      - run: pnpm audit:deps   # fails on known high/critical vulnerabilities in production dependencies
       - run: pnpm lint
       - run: pnpm build        # builds shared packages first (topological order)
       - run: pnpm typecheck

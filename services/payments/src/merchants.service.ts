@@ -1,12 +1,14 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
-import { CanActivate, ExecutionContext, Inject, Injectable, createParamDecorator } from '@nestjs/common';
-import type { Request } from 'express';
+import { CanActivate, ExecutionContext, Inject, Injectable, Optional, createParamDecorator } from '@nestjs/common';
+import type { Request, Response } from 'express';
 import type { Selectable } from 'kysely';
 import type { MerchantsTable } from './db-schema.js';
 import { Errors } from './errors.js';
 import type { LedgerClient } from './clients/ledger.client.js';
 import type { Db } from './payments.repo.js';
-import { CONFIG, DB, LEDGER, type PaymentsConfig } from './tokens.js';
+import { AuditService } from './audit.service.js';
+import type { RateLimiter } from './rate-limiter.js';
+import { CONFIG, DB, LEDGER, RATE_LIMITER, type PaymentsConfig } from './tokens.js';
 
 export type Merchant = Selectable<MerchantsTable>;
 
@@ -17,10 +19,11 @@ export class MerchantsService {
   constructor(
     @Inject(DB) private readonly db: Db,
     @Inject(LEDGER) private readonly ledger: LedgerClient,
+    private readonly audit: AuditService,
   ) {}
 
   /** Create a merchant + its ledger wallet. The plaintext API key is returned ONCE and never stored. */
-  async create(input: { name: string; feeBps?: number; rateLimitPerMin?: number }) {
+  async create(input: { name: string; feeBps?: number; rateLimitPerMin?: number }, ip?: string) {
     const id = randomUUID();
     const wallet = await this.ledger.wallet('merchant', id);
     const apiKey = `zd_live_${randomBytes(32).toString('base64url')}`;
@@ -37,6 +40,7 @@ export class MerchantsService {
       })
       .returningAll()
       .executeTakeFirstOrThrow();
+    await this.audit.write({ actor: 'admin', merchantId: id, action: 'merchant.created', resourceType: 'merchant', resourceId: id, ip, details: { name: input.name, feeBps: row.fee_bps, rateLimitPerMin: row.rate_limit_per_min } }); // never the key
     return { merchant: this.publicView(row), apiKey };
   }
 
@@ -73,16 +77,44 @@ export class MerchantsService {
 /** Authenticates `Authorization: Bearer <api key>` (or `x-api-key`) and attaches the merchant. */
 @Injectable()
 export class MerchantAuthGuard implements CanActivate {
-  constructor(private readonly merchants: MerchantsService) {}
+  constructor(
+    private readonly merchants: MerchantsService,
+    @Optional() @Inject(RATE_LIMITER) private readonly limiter?: RateLimiter,
+  ) {}
 
+  /**
+   * 1. Refuse clients that keep presenting bad keys (cheap check, BEFORE the database lookup).
+   * 2. Authenticate the key.
+   * 3. Spend a token from THIS merchant's bucket: one noisy merchant cannot slow the others, and every
+   *    response tells the caller its quota (X-RateLimit-*).
+   */
   async canActivate(ctx: ExecutionContext): Promise<boolean> {
-    const req = ctx.switchToHttp().getRequest<Request & { merchant?: Merchant }>();
+    const http = ctx.switchToHttp();
+    const req = http.getRequest<Request & { merchant?: Merchant }>();
+    const res = http.getResponse<Response>();
+    const client = req.ip ?? 'unknown';
+
+    if (this.limiter) {
+      const t = await this.limiter.isThrottled(client);
+      if (t.throttled) throw Errors.rateLimited(t.retryAfterSeconds);
+    }
     const header = req.headers.authorization;
     const key = header?.startsWith('Bearer ') ? header.slice(7) : (req.headers['x-api-key'] as string | undefined);
-    if (!key) throw Errors.unauthorized();
-    const merchant = await this.merchants.authenticate(key);
-    if (!merchant) throw Errors.unauthorized();
+    const merchant = key ? await this.merchants.authenticate(key) : null;
+    if (!merchant) {
+      // the attempt that pushes the client over its failure budget is itself refused with 429
+      const f = await this.limiter?.recordFailedAuth(client);
+      if (f?.throttled) throw Errors.rateLimited(f.retryAfterSeconds);
+      throw Errors.unauthorized();
+    }
     req.merchant = merchant;
+
+    if (this.limiter) {
+      const d = await this.limiter.consume(merchant.id, merchant.rate_limit_per_min);
+      res.setHeader('X-RateLimit-Limit', String(d.limit));
+      res.setHeader('X-RateLimit-Remaining', String(d.remaining));
+      if (!d.allowed) throw Errors.rateLimited(d.retryAfterSeconds);
+    }
     return true;
   }
 }

@@ -21,7 +21,8 @@
     "kysely": "^0.29.7",
     "pg": "^8.23.1",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.2"
+    "rxjs": "^7.8.2",
+    "@zerodrift/telemetry": "workspace:*"
   },
   "exports": {
     ".": "./dist/main.js",

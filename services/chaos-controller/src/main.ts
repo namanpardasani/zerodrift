@@ -1,3 +1,5 @@
+// Tracing must be registered BEFORE anything else loads http/pg so they can be instrumented.
+import '@zerodrift/telemetry/register';
 import 'reflect-metadata';
 import { chaosEnabled, loadConfig, z } from '@zerodrift/config';
 import { startChaos } from './app.js';

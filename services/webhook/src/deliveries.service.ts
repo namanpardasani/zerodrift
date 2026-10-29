@@ -1,11 +1,13 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { DomainError, backoffDelayMs, registry } from '@zerodrift/common';
+import { DomainError, backoffDelayMs, registry, runWithContext } from '@zerodrift/common';
+import { SpanKind, withSpan } from '@zerodrift/telemetry';
 import type { EventEnvelope } from '@zerodrift/events';
 import { SIGNATURE_HEADER, buildSignatureHeader } from '@zerodrift/webhooks';
 import { type Kysely, type Transaction, sql } from 'kysely';
 import { Counter, Histogram } from 'prom-client';
 import type { WebhookConfig } from './config.js';
 import type { DeliveryStatus, WebhookDB } from './db-schema.js';
+import { AuditService } from './audit.service.js';
 import { EndpointsService } from './endpoints.service.js';
 import { CONFIG, DB } from './tokens.js';
 import { assertSafeUrl } from './url-guard.js';
@@ -47,6 +49,7 @@ export class DeliveriesService {
     @Inject(DB) private readonly db: Db,
     @Inject(CONFIG) private readonly config: WebhookConfig,
     private readonly endpoints: EndpointsService,
+    private readonly audit: AuditService,
   ) {}
 
   /**
@@ -97,8 +100,24 @@ export class DeliveriesService {
     return rows.rows.map((r) => r.id);
   }
 
-  /** Make one HTTP attempt for a claimed delivery, then record the outcome. */
+  /**
+   * Make one HTTP attempt for a claimed delivery, then record the outcome. Runs inside a span that
+   * continues the trace of the payment that produced the event, and with its correlation id in context.
+   */
   async attempt(deliveryId: string): Promise<'succeeded' | 'retry' | 'dead' | 'skipped'> {
+    const origin = await this.db
+      .selectFrom('webhook_deliveries as d')
+      .innerJoin('webhook_events as e', 'e.event_id', 'd.event_id')
+      .select('e.payload')
+      .where('d.id', '=', deliveryId)
+      .executeTakeFirst();
+    const env = (origin?.payload ?? {}) as { traceparent?: string; correlationId?: string; eventType?: string };
+    return runWithContext({ correlationId: env.correlationId ?? deliveryId }, () =>
+      withSpan('webhook.deliver', () => this.attemptInner(deliveryId), { parentTraceparent: env.traceparent, kind: SpanKind.CLIENT, attributes: { 'zerodrift.delivery.id': deliveryId, 'zerodrift.event.type': env.eventType ?? '' } }),
+    );
+  }
+
+  private async attemptInner(deliveryId: string): Promise<'succeeded' | 'retry' | 'dead' | 'skipped'> {
     const d = await this.db
       .selectFrom('webhook_deliveries as d')
       .innerJoin('webhook_events as e', 'e.event_id', 'd.event_id')
@@ -253,21 +272,24 @@ export class DeliveriesService {
    * a new retry cycle starts. Replaying an already-successful delivery is allowed on purpose
    * (receivers dedupe on the event id header).
    */
-  async replay(merchantId: string | undefined, id: string): Promise<DeliveryView> {
+  async replay(merchantId: string | undefined, id: string, ip?: string): Promise<DeliveryView> {
     await this.getOwned(merchantId, id);
-    await this.db
+    await this.db.transaction().execute(async (trx) => {
+      await trx
       .updateTable('webhook_deliveries')
       .set({ status: 'pending', cycle_attempts: 0, replay_count: sql`replay_count + 1` as never, next_attempt_at: sql`now()` as never, updated_at: sql`now()` as never })
       .where('id', '=', id)
       .execute();
+      await this.audit.write({ actor: merchantId ? `merchant:${merchantId}` : 'admin', merchantId: merchantId ?? null, action: 'webhook_delivery.replayed', resourceType: 'webhook_delivery', resourceId: id, ip }, trx);
+    });
     return this.getOwned(merchantId, id);
   }
 
   /** Replay every delivery of one event (all endpoints). */
-  async replayEvent(merchantId: string, eventId: string): Promise<DeliveryView[]> {
+  async replayEvent(merchantId: string, eventId: string, ip?: string): Promise<DeliveryView[]> {
     const ds = await this.list({ merchantId, eventId, limit: 500 });
     if (ds.length === 0) throw new DomainError('not_found', `No deliveries for event ${eventId}`, 404);
-    return Promise.all(ds.map((d) => this.replay(merchantId, d.id)));
+    return Promise.all(ds.map((d) => this.replay(merchantId, d.id, ip)));
   }
 
   async stats(): Promise<Record<string, number>> {

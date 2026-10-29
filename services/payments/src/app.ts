@@ -7,6 +7,7 @@ import { createDb, createPool, migrateToLatest } from '@zerodrift/db';
 import { type OutboxRelay, startOutboxRelay } from '@zerodrift/kafka';
 import { GatewayClient, type GatewayClientOptions } from './clients/gateway.client.js';
 import { LedgerClient } from './clients/ledger.client.js';
+import { RateLimiter } from './rate-limiter.js';
 import type { PaymentsDB } from './db-schema.js';
 import { PaymentsModule } from './payments.module.js';
 import type { PaymentsConfig } from './tokens.js';
@@ -26,6 +27,12 @@ export interface PaymentsAppOptions {
   recoveryScheduler?: boolean;
   /** Kafka bootstrap servers. Omit to run without publishing events (events still accumulate in the outbox). */
   kafkaBrokers?: string[];
+  /** Redis for per-merchant rate limiting. Omit to disable rate limiting. */
+  redisUrl?: string;
+  /** Quota window in seconds (60 in production; tests shorten it). */
+  rateWindowSeconds?: number;
+  /** Failed API-key attempts per client per window before it is throttled (default 20). */
+  rateMaxFailedAuth?: number;
   logLevel?: string;
 }
 
@@ -37,6 +44,7 @@ export interface RunningPayments {
   ledger: LedgerClient;
   config: PaymentsConfig;
   relay?: OutboxRelay;
+  rateLimiter?: RateLimiter;
   close: () => Promise<void>;
 }
 
@@ -64,8 +72,10 @@ export async function startPayments(opts: PaymentsAppOptions): Promise<RunningPa
   const gateway = new GatewayClient({ baseUrl: opts.gatewayUrl, ...opts.gatewayClient });
   if (opts.publicUrl) gateway.setCallbackUrl(`${opts.publicUrl}/internal/gateway-callback`);
 
+  const rateLimiter = opts.redisUrl ? new RateLimiter({ redisUrl: opts.redisUrl, windowSeconds: opts.rateWindowSeconds, maxFailedAuth: opts.rateMaxFailedAuth, log: (m) => log.warn(m) }) : undefined;
+  if (!rateLimiter) log.warn('REDIS_URL not set: per-merchant rate limiting is DISABLED');
   const app = await bootstrap(
-    PaymentsModule.forRoot({ db, ledger, gateway, config, recoveryScheduler: opts.recoveryScheduler }),
+    PaymentsModule.forRoot({ db, ledger, gateway, config, rateLimiter, recoveryScheduler: opts.recoveryScheduler }),
     opts.port,
     'payments',
     { silent: opts.logLevel === 'silent' },
@@ -84,8 +94,10 @@ export async function startPayments(opts: PaymentsAppOptions): Promise<RunningPa
     ledger,
     config,
     relay,
+    rateLimiter,
     close: async () => {
       await relay?.stop();
+      await rateLimiter?.close();
       await app.close();
       gateway.shutdown();
       await pool.end();

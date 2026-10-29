@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { type INestApplication, Module } from '@nestjs/common';
 import { APP_FILTER, NestFactory } from '@nestjs/core';
-import { ErrorFilter, correlationMiddleware, createHealthModule, createLogger } from '@zerodrift/common';
+import { ErrorFilter, createHealthModule, createLogger, requestMiddleware } from '@zerodrift/common';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { ApiController, AuthController } from './api.controller.js';
 import { CONFIG, JwtGuard, LoginLimiter, TokenService } from './auth.js';
@@ -43,7 +43,7 @@ export async function startDashboardApi(opts: { port: number; config: DashboardC
   const app = await NestFactory.create(DashboardModule, { logger: opts.logLevel === 'silent' ? false : ['error', 'warn', 'log'] });
   const http = app.getHttpAdapter().getInstance() as express.Express;
   http.disable('x-powered-by');
-  app.use(correlationMiddleware);
+  app.use(requestMiddleware(log));
 
   // Baseline security headers for everything we serve. CSP: only our own origin may supply scripts/styles/images/XHR.
   app.use((_req: Request, res: Response, next: NextFunction) => {

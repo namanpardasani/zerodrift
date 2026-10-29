@@ -71,3 +71,24 @@ export function loadConfig<T extends z.ZodRawShape>(
 export function chaosEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   return env.NODE_ENV !== 'production' && env.CHAOS_ENABLED === 'true';
 }
+
+/**
+ * Well-known DEVELOPMENT secrets that ship in docker-compose.yml and the docs. They are public, so a
+ * production deployment using any of them is wide open. Services call `refuseDevSecrets` at boot.
+ */
+export const DEV_SECRETS = new Set([
+  'dev-admin-token',
+  'dev-gateway-secret',
+  'dev-only-jwt-secret-change-me-0123456789',
+  'zerodrift',
+  'emVyb2RyaWZ0LWRldi1vbmx5LWtleS0zMmJ5dGVzISE=', // base64 of the dev webhook encryption key
+]);
+
+/** In production, throw if any named secret is a known development value. No-op elsewhere. */
+export function refuseDevSecrets(nodeEnv: string, secrets: Record<string, string | undefined>): void {
+  if (nodeEnv !== 'production') return;
+  const bad = Object.entries(secrets)
+    .filter(([, v]) => v === undefined || v === '' || DEV_SECRETS.has(v))
+    .map(([k]) => k);
+  if (bad.length) throw new Error(`Refusing to start in production with missing/development secrets: ${bad.join(', ')}. Set real values (see .env.example).`);
+}

@@ -1,4 +1,4 @@
-import { retry } from '@zerodrift/common';
+import { correlationHeaders, retry } from '@zerodrift/common';
 
 /** The ledger did not answer in time / the network failed / it returned 5xx: outcome UNKNOWN. */
 export class LedgerUnavailable extends Error {
@@ -63,7 +63,7 @@ export class LedgerClient {
         try {
           res = await fetch(`${this.opts.baseUrl}${path}`, {
             method,
-            headers: { 'content-type': 'application/json', ...(idempotencyKey ? { 'idempotency-key': idempotencyKey } : {}) },
+            headers: { 'content-type': 'application/json', ...correlationHeaders(), ...(idempotencyKey ? { 'idempotency-key': idempotencyKey } : {}) },
             body: body === undefined ? undefined : JSON.stringify(body),
             signal: AbortSignal.timeout(this.timeoutMs),
           });

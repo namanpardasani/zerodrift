@@ -71,6 +71,12 @@ services:
       - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
     depends_on: [prometheus]
 
+  # Distributed tracing UI + OTLP collector. Every service exports spans to it (OTEL_EXPORTER_OTLP_ENDPOINT).
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    ports: ['16686:16686']
+    environment: { COLLECTOR_OTLP_ENABLED: 'true' }
+
   toxiproxy:
     image: ghcr.io/shopify/toxiproxy:2.12.0
     ports: ['8474:8474']
@@ -82,6 +88,8 @@ services:
     build: { context: ., args: { SERVICE: ledger } }
     ports: ['3001:3001']
     environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_SERVICE_NAME: ledger
       NODE_ENV: development
       DATABASE_URL: postgres://zerodrift:zerodrift@postgres:5432/ledger
       KAFKA_BROKERS: kafka:9092
@@ -95,13 +103,17 @@ services:
       ledger: { condition: service_started }
       mock-gateway: { condition: service_started }
       toxiproxy: { condition: service_started }
+      redis: { condition: service_healthy }
     environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_SERVICE_NAME: payments
       NODE_ENV: development
       DATABASE_URL: postgres://zerodrift:zerodrift@postgres:5432/payments
       # payments reaches the ledger and the bank THROUGH Toxiproxy so the chaos panel can inject real network faults
       LEDGER_URL: http://toxiproxy:13001
       GATEWAY_URL: http://toxiproxy:13005
       KAFKA_BROKERS: kafka:9092
+      REDIS_URL: redis://redis:6379
       PUBLIC_URL: http://payments:3002
       ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-admin-token}
       GATEWAY_CALLBACK_SECRET: ${GATEWAY_CALLBACK_SECRET:-dev-gateway-secret}
@@ -115,6 +127,8 @@ services:
       kafka: { condition: service_healthy }
       payments: { condition: service_started }
     environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_SERVICE_NAME: webhook
       NODE_ENV: development
       DATABASE_URL: postgres://zerodrift:zerodrift@postgres:5432/webhook
       PAYMENTS_URL: http://payments:3002
@@ -135,6 +149,8 @@ services:
       payments: { condition: service_started }
       mock-gateway: { condition: service_started }
     environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_SERVICE_NAME: reconciliation
       NODE_ENV: development
       DATABASE_URL: postgres://zerodrift:zerodrift@postgres:5432/reconciliation
       LEDGER_URL: http://ledger:3001
@@ -152,6 +168,8 @@ services:
     ports: ['3005:3005']
     depends_on: { postgres: { condition: service_healthy } }
     environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_SERVICE_NAME: mock-gateway
       NODE_ENV: development
       DATABASE_URL: postgres://zerodrift:zerodrift@postgres:5432/gateway
       # lets the gateway create its database on first boot even if the volume predates it
@@ -174,6 +192,8 @@ services:
       COMPOSE_PROJECT: zerodrift
       GATEWAY_URL: http://mock-gateway:3005
       TOXIPROXY_URL: http://toxiproxy:8474
+    # runs as root ONLY because it must talk to the Docker socket (all other services run as the unprivileged `node` user)
+    user: root
     # DEV ONLY: the Docker socket lets this container kill/pause other containers (that is the point),
     # and is effectively root on the host. The controller refuses to run when NODE_ENV=production.
     volumes: ['/var/run/docker.sock:/var/run/docker.sock']
@@ -184,6 +204,8 @@ services:
     ports: ['3008:3008']
     depends_on: [ledger, payments, webhook, reconciliation]
     environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_SERVICE_NAME: dashboard-api
       NODE_ENV: development
       ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-admin-token}
       # DEV-ONLY credentials. In production the service refuses to start with these defaults.

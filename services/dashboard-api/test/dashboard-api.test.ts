@@ -189,6 +189,25 @@ describe('proxying to the services', () => {
   });
 });
 
+describe('audit trail', () => {
+  it('merges both services newest-first, tags the source, forwards only allowed filters, and degrades if one is down', async () => {
+    payments.handler = () => ({ status: 200, body: { logs: [{ id: 'a', action: 'payment.created', at: '2026-10-29T10:00:03Z' }, { id: 'c', action: 'refund.created', at: '2026-10-29T10:00:01Z' }] } });
+    webhook.handler = () => ({ status: 200, body: { logs: [{ id: 'b', action: 'webhook_endpoint.created', at: '2026-10-29T10:00:02Z' }] } });
+    const r = await call('/api/audit?action=x&bogus=1&limit=50');
+    expect(r.body.logs.map((l: { id: string }) => l.id)).toEqual(['a', 'b', 'c']);
+    expect(r.body.logs.map((l: { source: string }) => l.source)).toEqual(['payments', 'webhook', 'payments']);
+    expect(r.body.unavailable).toEqual([]);
+    expect(lastSeen(payments).url).toBe('/admin/audit-logs?action=x&limit=50'); // 'bogus' was dropped
+    expect(lastSeen(payments).headers['x-admin-token']).toBe(ADMIN);
+    webhook.handler = () => ({ status: 500, body: {} });
+    const partial = await call('/api/audit');
+    expect(partial.body.logs.map((l: { id: string }) => l.id)).toEqual(['a', 'c']);
+    expect(partial.body.unavailable).toEqual(['webhook']);
+    webhook.handler = () => ({ status: 200, body: {} });
+    expect((await call('/api/audit', { token: null })).status).toBe(401);
+  });
+});
+
 describe('metrics (fixed queries only)', () => {
   it('summarises Prometheus instant queries and exposes range queries only by name', async () => {
     prom.handler = (_m, url) => ({ status: 200, body: { status: 'success', data: { result: url.includes('query_range') ? [{ metric: {}, values: [[1, '2'], [2, '3']] }] : [{ metric: { to: 'succeeded' }, value: [1, '7'] }] } } });

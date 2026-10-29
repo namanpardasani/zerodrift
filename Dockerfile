@@ -14,4 +14,6 @@ ENV SERVICE=${SERVICE} NODE_ENV=production UV_THREADPOOL_SIZE=32
 WORKDIR /app
 COPY --from=build /app /app
 WORKDIR /app/services/${SERVICE}
+# Never run as root: a compromised service then cannot modify the image or reach host-level resources.
+USER node
 CMD ["node", "dist/main.js"]

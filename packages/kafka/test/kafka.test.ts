@@ -1,8 +1,13 @@
 import { randomUUID } from 'node:crypto';
+import { InMemorySpanExporter, SimpleSpanProcessor } from '@opentelemetry/sdk-trace-base';
+import { NodeTracerProvider } from '@opentelemetry/sdk-trace-node';
+import { getCorrelationId, registry, runWithContext } from '@zerodrift/common';
+import { currentTraceId, withSpan } from '@zerodrift/telemetry';
 import { waitFor } from '@zerodrift/testing';
 import { sql } from 'kysely';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { OutboxPublisher, type Producer, createProducer, startIdempotentConsumer } from '../src/index.js';
+import { OutboxPublisher, type Producer, computeLag, createProducer, emitEvent, startIdempotentConsumer } from '../src/index.js';
+import { makeEvent } from '@zerodrift/events';
 import { createServiceDb, createTopics, readAll, writeOutbox } from './helpers.js';
 
 let svc: Awaited<ReturnType<typeof createServiceDb>>;
@@ -250,4 +255,143 @@ describe('consumer failure handling', () => {
       await c.stop();
     }
   }, 90_000);
+});
+
+describe('trace + correlation context across Kafka', () => {
+  const exporter = new InMemorySpanExporter();
+  const provider = new NodeTracerProvider({ spanProcessors: [new SimpleSpanProcessor(exporter)] });
+  beforeAll(() => provider.register());
+  afterAll(() => provider.shutdown());
+
+  it('the trace id and correlation id of the request that wrote the event reappear in the consumer handler, and the consumer span is a child of the request span', async () => {
+    await clearAll();
+    exporter.reset();
+    const t = await createTopics();
+    const pub = new OutboxPublisher({ db: svc.db, producer, service: 'test', topicFor: t.topicFor, lockId: 9 });
+    const seen: { traceId?: string; correlationId?: string; envelopeTrace?: string }[] = [];
+    const consumer = await startIdempotentConsumer({
+      kafka: t.kafka, groupId: `g-${randomUUID()}`, topics: [t.topic], db: svc.db,
+      handler: async (ctx) => {
+        seen.push({ traceId: currentTraceId(), correlationId: getCorrelationId(), envelopeTrace: ctx.event.traceparent });
+      },
+    });
+    try {
+      let requestTraceId = '';
+      // "an HTTP request" with a correlation id writes an event inside its DB transaction
+      await runWithContext({ correlationId: 'req-corr-123' }, () =>
+        withSpan('POST /v1/payments', async (span) => {
+          requestTraceId = span.spanContext().traceId;
+          const env = makeEvent('transfer.completed', 'transfer', 'agg-trace', { transactionId: randomUUID(), fromAccountId: randomUUID(), toAccountId: randomUUID(), amountMinor: '100', currency: 'INR' });
+          await svc.db.transaction().execute((trx) => emitEvent(trx, env));
+        }),
+      );
+      await drain(pub);
+      await waitFor(async () => (seen.length === 1 ? true : false), 20_000);
+      // the span only reaches the exporter when it ENDS, which is just after the handler returns
+      await waitFor(async () => (exporter.getFinishedSpans().some((sp) => sp.name === 'consume transfer.completed') ? true : false), 10_000);
+
+      expect(seen[0]!.traceId).toBe(requestTraceId); // the consumer is INSIDE the original trace
+      expect(seen[0]!.correlationId).toBe('req-corr-123'); // and its logs would carry the original correlation id
+      expect(seen[0]!.envelopeTrace).toContain(requestTraceId);
+
+      const spans = exporter.getFinishedSpans();
+      const request = spans.find((s) => s.name === 'POST /v1/payments')!;
+      const consume = spans.find((s) => s.name === 'consume transfer.completed')!;
+      expect(consume.spanContext().traceId).toBe(request.spanContext().traceId);
+      expect(consume.parentSpanContext?.spanId).toBe(request.spanContext().spanId);
+      expect(consume.attributes['messaging.system']).toBe('kafka');
+      expect(consume.attributes['zerodrift.event.type']).toBe('transfer.completed');
+    } finally {
+      await consumer.stop();
+    }
+  }, 60_000);
+
+  it('events written with no trace/correlation context still flow (tracing off is a supported mode)', async () => {
+    await clearAll();
+    const t = await createTopics();
+    const pub = new OutboxPublisher({ db: svc.db, producer, service: 'test', topicFor: t.topicFor, lockId: 10 });
+    const seen: unknown[] = [];
+    const consumer = await startIdempotentConsumer({ kafka: t.kafka, groupId: `g-${randomUUID()}`, topics: [t.topic], db: svc.db, handler: async (ctx) => void seen.push(ctx.event.traceparent) });
+    try {
+      await writeOutbox(svc.db, 'agg-plain', 1);
+      await drain(pub);
+      await waitFor(async () => (seen.length === 1 ? true : false), 20_000);
+      expect(seen[0]).toBeUndefined();
+    } finally {
+      await consumer.stop();
+    }
+  }, 60_000);
+});
+
+describe('consumer lag', () => {
+  it('counts unconsumed messages for a group that has not started, then drops to zero as it catches up', async () => {
+    await clearAll();
+    const t = await createTopics();
+    const pub = new OutboxPublisher({ db: svc.db, producer, service: 'test', topicFor: t.topicFor, lockId: 11 });
+    for (let n = 0; n < 25; n++) await writeOutbox(svc.db, `agg-${n % 5}`, n);
+    await drain(pub);
+
+    const groupId = `g-${randomUUID()}`;
+    expect((await computeLag(t.kafka, groupId, [t.topic]))[t.topic]).toBe(25); // nobody has read anything yet
+
+    const consumer = await startIdempotentConsumer({ kafka: t.kafka, groupId, topics: [t.topic], db: svc.db, handler: defaultHandler, lagIntervalMs: 0 });
+    try {
+      await waitFor(async () => (await handledCount()) === 25, 30_000);
+      await waitFor(async () => ((await computeLag(t.kafka, groupId, [t.topic]))[t.topic] === 0 ? true : false), 30_000); // offsets are committed shortly after handling
+    } finally {
+      await consumer.stop();
+    }
+  }, 90_000);
+
+  it('grows while a consumer is stopped and new events keep arriving', async () => {
+    await clearAll();
+    const t = await createTopics();
+    const pub = new OutboxPublisher({ db: svc.db, producer, service: 'test', topicFor: t.topicFor, lockId: 12 });
+    const groupId = `g-${randomUUID()}`;
+    const start = () => startIdempotentConsumer({ kafka: t.kafka, groupId, topics: [t.topic], db: svc.db, handler: defaultHandler, lagIntervalMs: 0 });
+    let c = await start();
+    await writeOutbox(svc.db, 'agg-a', 1);
+    await drain(pub);
+    await waitFor(async () => (await handledCount()) === 1, 20_000);
+    await waitFor(async () => ((await computeLag(t.kafka, groupId, [t.topic]))[t.topic] === 0 ? true : false), 30_000);
+    await c.stop(); // the consumer goes away...
+    for (let n = 0; n < 7; n++) await writeOutbox(svc.db, 'agg-a', 10 + n);
+    await drain(pub);
+    expect((await computeLag(t.kafka, groupId, [t.topic]))[t.topic]).toBe(7); // ...and the backlog is visible
+    c = await start();
+    try {
+      await waitFor(async () => (await handledCount()) === 8, 30_000);
+    } finally {
+      await c.stop();
+    }
+  }, 120_000);
+});
+
+describe('lag monitor robustness', () => {
+  it('publishes kafka_consumer_lag as a metric while a consumer runs', async () => {
+    await clearAll();
+    const t = await createTopics();
+    const pub = new OutboxPublisher({ db: svc.db, producer, service: 'test', topicFor: t.topicFor, lockId: 13 });
+    const groupId = `g-metric-${randomUUID().slice(0, 8)}`;
+    for (let n = 0; n < 6; n++) await writeOutbox(svc.db, 'agg-m', n);
+    await drain(pub);
+    const consumer = await startIdempotentConsumer({ kafka: t.kafka, groupId, topics: [t.topic], db: svc.db, handler: defaultHandler, lagIntervalMs: 300 });
+    try {
+      await waitFor(async () => ((await registry.metrics()).includes(`kafka_consumer_lag{group="${groupId}",topic="${t.topic}"}`) ? true : false), 20_000);
+      await waitFor(async () => (new RegExp(`kafka_consumer_lag\\{group="${groupId}",topic="${t.topic.replace(/\./g, '\\.')}"\\} 0`).test(await registry.metrics()) ? true : false), 30_000);
+    } finally {
+      await consumer.stop();
+    }
+  }, 90_000);
+
+  it('rapid start/stop cycles with an aggressive lag monitor never crash the native client (regression: SIGSEGV when clients were torn down concurrently)', async () => {
+    await clearAll();
+    const t = await createTopics();
+    for (let i = 0; i < 6; i++) {
+      const c = await startIdempotentConsumer({ kafka: t.kafka, groupId: `g-cycle-${randomUUID().slice(0, 8)}`, topics: [t.topic], db: svc.db, handler: defaultHandler, lagIntervalMs: 50 });
+      await new Promise((r) => setTimeout(r, 250 + i * 40)); // let some monitor reads be in flight at stop time
+      await c.stop();
+    }
+    expect(true).toBe(true); // reaching here without a SIGSEGV is the assertion
+  }, 120_000);
 });

@@ -61,6 +61,7 @@ const pages = [
   ['/ledger', 'Ledger', 'double-entry', '05-ledger'],
   ['/webhooks', 'Webhooks', 'Deliveries', '06-webhooks'],
   ['/reconciliation', 'Reconciliation', 'Latest internal run', '07-reconciliation'],
+  ['/audit', 'Audit log', 'append-only', '07b-audit'],
   ['/metrics', 'Metrics', 'Gateway circuit', '08-metrics'],
   ['/chaos', 'Chaos', 'Mock bank faults', '09-chaos'],
 ];

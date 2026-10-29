@@ -1,10 +1,13 @@
 import { KafkaJS } from '@confluentinc/kafka-javascript';
-import { backoffDelayMs, registry } from '@zerodrift/common';
+import { backoffDelayMs, registry, runWithContext } from '@zerodrift/common';
 import { dlqTopicFor } from '@zerodrift/config';
 import { type EventEnvelope, type EventType, parseEvent } from '@zerodrift/events';
 import { type Kysely, type Transaction, sql } from 'kysely';
+import { SpanKind, withSpan } from '@zerodrift/telemetry';
+import { randomUUID } from 'node:crypto';
 import { Counter } from 'prom-client';
 import { type Kafka, type Producer, createProducer } from './client.js';
+import { startLagMonitor } from './lag.js';
 
 const processed = new Counter({
   name: 'consumer_messages_total',
@@ -49,6 +52,8 @@ export interface IdempotentConsumerOptions {
   retryBaseMs?: number;
   retryMaxMs?: number;
   fromBeginning?: boolean;
+  /** How often to publish this group's lag as the kafka_consumer_lag metric. 0 disables. */
+  lagIntervalMs?: number;
   onError?: (err: unknown, info: { topic: string; offset: string; attempt: number }) => void;
 }
 
@@ -117,32 +122,46 @@ export async function startIdempotentConsumer(opts: IdempotentConsumerOptions): 
         return;
       }
 
-      for (let attempt = 1; ; attempt++) {
-        try {
-          const duplicate = await opts.db.transaction().execute(async (trx) => {
-            const claimed = await sql<{ event_id: string }>`
-              INSERT INTO processed_events (consumer, event_id) VALUES (${opts.groupId}, ${parsed.envelope.eventId})
-              ON CONFLICT DO NOTHING RETURNING event_id`.execute(trx);
-            if (claimed.rows.length === 0) return true; // already handled: skip
-            await opts.handler({ trx, event: parsed.envelope, type: parsed.type, payload: parsed.payload, meta: { topic, partition, offset } });
-            return false;
-          });
-          processed.inc({ consumer: opts.groupId, result: duplicate ? 'duplicate' : 'processed' });
-          return;
-        } catch (err) {
-          opts.onError?.(err, { topic, offset, attempt });
-          if (attempt >= maxAttempts) {
-            await deadLetter(topic, partition, offset, message.key as Buffer | null, raw, `handler_failed: ${(err as Error).message}`, attempt);
-            return;
-          }
-          await new Promise((r) => setTimeout(r, backoffDelayMs(attempt - 1, { baseMs: opts.retryBaseMs ?? 200, maxMs: opts.retryMaxMs ?? 5_000 })));
-        }
-      }
+      // Everything below runs (a) with the event's correlation id in context, so log lines written by the
+      // handler carry it, and (b) inside a span that CONTINUES the trace of the request that caused the
+      // event (its traceparent travelled in the envelope), so a payment's async tail is part of its trace.
+      await runWithContext({ correlationId: parsed.envelope.correlationId ?? randomUUID() }, () =>
+        withSpan(
+          `consume ${parsed.type}`,
+          async () => {
+            for (let attempt = 1; ; attempt++) {
+              try {
+                const duplicate = await opts.db.transaction().execute(async (trx) => {
+                  const claimed = await sql<{ event_id: string }>`
+                    INSERT INTO processed_events (consumer, event_id) VALUES (${opts.groupId}, ${parsed.envelope.eventId})
+                    ON CONFLICT DO NOTHING RETURNING event_id`.execute(trx);
+                  if (claimed.rows.length === 0) return true; // already handled: skip
+                  await opts.handler({ trx, event: parsed.envelope, type: parsed.type, payload: parsed.payload, meta: { topic, partition, offset } });
+                  return false;
+                });
+                processed.inc({ consumer: opts.groupId, result: duplicate ? 'duplicate' : 'processed' });
+                return;
+              } catch (err) {
+                opts.onError?.(err, { topic, offset, attempt });
+                if (attempt >= maxAttempts) {
+                  await deadLetter(topic, partition, offset, message.key as Buffer | null, raw, `handler_failed: ${(err as Error).message}`, attempt);
+                  return;
+                }
+                await new Promise((r) => setTimeout(r, backoffDelayMs(attempt - 1, { baseMs: opts.retryBaseMs ?? 200, maxMs: opts.retryMaxMs ?? 5_000 })));
+              }
+            }
+          },
+          { parentTraceparent: parsed.envelope.traceparent, kind: SpanKind.CONSUMER, attributes: { 'messaging.system': 'kafka', 'messaging.destination.name': topic, 'zerodrift.event.id': parsed.envelope.eventId, 'zerodrift.event.type': parsed.type } },
+        ),
+      );
     },
   });
 
+  const stopLag = (opts.lagIntervalMs ?? 5_000) > 0 ? startLagMonitor(opts.kafka, opts.groupId, opts.topics, opts.lagIntervalMs ?? 5_000) : async () => {};
   return {
     stop: async () => {
+      // strictly one native client at a time: lag admin first, then the consumer, then the DLQ producer
+      await stopLag();
       await consumer.disconnect();
       await dlqProducer.disconnect();
     },

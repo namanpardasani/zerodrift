@@ -1,5 +1,7 @@
+// Tracing must be registered BEFORE anything else loads http/pg so they can be instrumented.
+import '@zerodrift/telemetry/register';
 import 'reflect-metadata';
-import { loadConfig, z } from '@zerodrift/config';
+import { loadConfig, refuseDevSecrets, z } from '@zerodrift/config';
 import { startGateway } from './app.js';
 
 const config = loadConfig(
@@ -11,6 +13,8 @@ const config = loadConfig(
   },
   { SERVICE_NAME: 'mock-gateway', PORT: '3005', ...process.env },
 );
+
+refuseDevSecrets(config.NODE_ENV, { GATEWAY_CALLBACK_SECRET: config.GATEWAY_CALLBACK_SECRET });
 
 startGateway({
   databaseUrl: config.DATABASE_URL,

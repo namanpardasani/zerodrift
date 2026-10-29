@@ -8,6 +8,7 @@ import { IdempotencyService, hashRequest } from './idempotency.service.js';
 import type { Merchant } from './merchants.service.js';
 import { emit } from './outbox.js';
 import { type Db, type PaymentView, PaymentsRepo, paymentEventBase, toView } from './payments.repo.js';
+import { AuditService } from './audit.service.js';
 import { SagaService } from './saga.service.js';
 import { isSettled } from './state-machine.js';
 import { DB, GATEWAY, LEDGER } from './tokens.js';
@@ -35,6 +36,7 @@ export class PaymentsService {
     private readonly repo: PaymentsRepo,
     private readonly saga: SagaService,
     private readonly idempotency: IdempotencyService,
+    private readonly audit: AuditService,
   ) {}
 
   /**
@@ -43,7 +45,7 @@ export class PaymentsService {
    *  202 + `processing`       -> outcome not known yet (timeout etc.); poll GET or wait for the webhook
    * Replays of the same Idempotency-Key never re-execute anything.
    */
-  async create(merchant: Merchant, input: CreatePaymentInput, key: string): Promise<ApiResult<PaymentView>> {
+  async create(merchant: Merchant, input: CreatePaymentInput, key: string, ip?: string): Promise<ApiResult<PaymentView>> {
     const requestHash = hashRequest('payment.create', { c: input.customerId, a: input.amountMinor, cur: input.currency, r: input.reference, d: input.description });
 
     // Resolve the customer's wallet BEFORE claiming the key: if the ledger is down nothing has been
@@ -89,6 +91,7 @@ export class PaymentsService {
       await trx.insertInto('payment_events').values({ payment_id: payment.id, from_status: null, to_status: 'created', reason: 'payment_created' }).execute();
       await emit(trx, makeEvent('payment.created', 'payment', payment.id, paymentEventBase(payment)));
       await this.idempotency.attach(trx, merchant.id, key, payment.id);
+      await this.audit.write({ actor: `merchant:${merchant.id}`, merchantId: merchant.id, action: 'payment.created', resourceType: 'payment', resourceId: payment.id, ip, details: { amountMinor: input.amountMinor.toString(), currency: input.currency, customerId: input.customerId } }, trx);
       return { kind: 'created' as const, payment };
     });
 

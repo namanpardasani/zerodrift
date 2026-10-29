@@ -4,6 +4,7 @@ import { decryptSecret, encryptSecret, generateSecret } from '@zerodrift/webhook
 import { type Kysely, type Selectable, sql } from 'kysely';
 import type { WebhookConfig } from './config.js';
 import type { EndpointsTable, WebhookDB } from './db-schema.js';
+import { AuditService } from './audit.service.js';
 import { CONFIG, DB } from './tokens.js';
 import { assertSafeUrl } from './url-guard.js';
 
@@ -35,12 +36,14 @@ export class EndpointsService {
   constructor(
     @Inject(DB) private readonly db: Kysely<WebhookDB>,
     @Inject(CONFIG) private readonly config: WebhookConfig,
+    private readonly audit: AuditService,
   ) {}
 
-  async create(merchantId: string, input: { url: string; description?: string; eventTypes?: string[] }): Promise<EndpointView> {
+  async create(merchantId: string, input: { url: string; description?: string; eventTypes?: string[] }, ip?: string): Promise<EndpointView> {
     await assertSafeUrl(input.url, { allowPrivate: this.config.allowPrivateUrls });
     const secret = generateSecret();
-    const row = await this.db
+    const row = await this.db.transaction().execute(async (trx) => {
+      const created = await trx
       .insertInto('webhook_endpoints')
       .values({
         merchant_id: merchantId,
@@ -54,6 +57,9 @@ export class EndpointsService {
       })
       .returningAll()
       .executeTakeFirstOrThrow();
+      await this.audit.write({ actor: `merchant:${merchantId}`, merchantId, action: 'webhook_endpoint.created', resourceType: 'webhook_endpoint', resourceId: created.id, ip, details: { url: input.url } }, trx);
+      return created;
+    });
     return view(row, secret);
   }
 
@@ -80,10 +86,11 @@ export class EndpointsService {
     return view(await this.getOwned(merchantId, id));
   }
 
-  async update(merchantId: string, id: string, patch: { url?: string; description?: string; active?: boolean; eventTypes?: string[] }): Promise<EndpointView> {
+  async update(merchantId: string, id: string, patch: { url?: string; description?: string; active?: boolean; eventTypes?: string[] }, ip?: string): Promise<EndpointView> {
     await this.getOwned(merchantId, id);
     if (patch.url) await assertSafeUrl(patch.url, { allowPrivate: this.config.allowPrivateUrls });
-    const row = await this.db
+    const row = await this.db.transaction().execute(async (trx) => {
+      const updated = await trx
       .updateTable('webhook_endpoints')
       .set({
         ...(patch.url !== undefined ? { url: patch.url } : {}),
@@ -95,22 +102,26 @@ export class EndpointsService {
       .where('id', '=', id)
       .returningAll()
       .executeTakeFirstOrThrow();
+      await this.audit.write({ actor: `merchant:${merchantId}`, merchantId, action: patch.active === false ? 'webhook_endpoint.disabled' : 'webhook_endpoint.updated', resourceType: 'webhook_endpoint', resourceId: id, ip, details: { changed: Object.keys(patch) } }, trx);
+      return updated;
+    });
     return view(row);
   }
 
   /** "Delete" disables the endpoint but keeps it (and its delivery history) so logs stay intact. */
-  async disable(merchantId: string, id: string): Promise<void> {
-    await this.update(merchantId, id, { active: false });
+  async disable(merchantId: string, id: string, ip?: string): Promise<void> {
+    await this.update(merchantId, id, { active: false }, ip);
   }
 
   /**
    * Rotate the signing secret with zero downtime: the old secret keeps signing (alongside the new
    * one) for a grace period, so a receiver can switch secrets at its own pace.
    */
-  async rotateSecret(merchantId: string, id: string): Promise<EndpointView> {
+  async rotateSecret(merchantId: string, id: string, ip?: string): Promise<EndpointView> {
     const current = await this.getOwned(merchantId, id);
     const secret = generateSecret();
-    const row = await this.db
+    const row = await this.db.transaction().execute(async (trx) => {
+      const rotated = await trx
       .updateTable('webhook_endpoints')
       .set({
         secret_encrypted: encryptSecret(secret, this.config.encryptionKey),
@@ -121,6 +132,9 @@ export class EndpointsService {
       .where('id', '=', id)
       .returningAll()
       .executeTakeFirstOrThrow();
+      await this.audit.write({ actor: `merchant:${merchantId}`, merchantId, action: 'webhook_endpoint.secret_rotated', resourceType: 'webhook_endpoint', resourceId: id, ip }, trx); // never the secret itself
+      return rotated;
+    });
     return view(row, secret);
   }
 

@@ -1,4 +1,4 @@
-import { DomainError } from '@zerodrift/common';
+import { DomainError, correlationHeaders } from '@zerodrift/common';
 
 export interface UpstreamResult<T = unknown> {
   status: number;
@@ -31,7 +31,7 @@ export class Upstream {
     try {
       res = await fetch(`${this.baseUrl}${path}`, {
         method,
-        headers: { 'content-type': 'application/json', ...this.headers, ...extraHeaders },
+        headers: { 'content-type': 'application/json', ...correlationHeaders(), ...this.headers, ...extraHeaders },
         body: body === undefined ? undefined : JSON.stringify(body),
         signal: AbortSignal.timeout(this.timeoutMs),
       });

@@ -437,6 +437,44 @@ describe('auth and tenancy', () => {
   });
 });
 
+describe('input hardening', () => {
+  const raw = (body: string, headers: Record<string, string> = {}) =>
+    fetch(`${s.payments.url}/v1/payments`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${M.apiKey}`, 'idempotency-key': `h-${uid()}`, ...headers }, body });
+
+  it('rejects an oversized body (413) instead of buffering it', async () => {
+    const big = JSON.stringify({ customerId: 'c', amountMinor: '1', description: 'x'.repeat(200_000) });
+    expect((await raw(big)).status).toBe(413);
+  });
+
+  it('answers malformed JSON with a clean 400 and never leaks a stack trace or file paths', async () => {
+    const res = await raw('{"customerId": "c", amountMinor: ');
+    expect(res.status).toBe(400);
+    const text = await res.text();
+    for (const leak of ['node_modules', '.ts:', 'at Object', 'at async', '/home/', 'stack']) expect(text).not.toContain(leak);
+    expect(JSON.parse(text).error.code).toBeTruthy();
+  });
+
+  it('unknown routes and wrong methods are plain JSON errors with no internals', async () => {
+    const nope = await fetch(`${s.payments.url}/v1/nothing-here`, { headers: { authorization: `Bearer ${M.apiKey}` } });
+    expect(nope.status).toBe(404);
+    expect(await nope.text()).not.toMatch(/node_modules|at Object|\/home\//);
+  });
+
+  it('a wrongly typed or oversized idempotency key is refused', async () => {
+    const c = await customer(1_000n);
+    expect((await s.api('/v1/payments', { key: M.apiKey, idempotencyKey: 'k'.repeat(300), body: { customerId: c, amountMinor: '5' } })).status).toBe(400);
+  });
+
+  it('does not reflect user input into response headers (header injection)', async () => {
+    const res = await fetch(`${s.payments.url}/v1/me`, { headers: { authorization: `Bearer ${M.apiKey}`, 'x-correlation-id': 'x\r\nSet-Cookie: pwn=1' } }).catch((e) => e);
+    // either the HTTP client refuses the header outright, or the server replaced it: it must never be echoed
+    if (res instanceof Response) {
+      expect(res.headers.get('set-cookie')).toBeNull();
+      expect(res.headers.get('x-correlation-id')).toMatch(/^[0-9a-f-]{36}$/);
+    }
+  });
+});
+
 describe('operator (admin) read API', () => {
   const admin = (path: string) => fetch(`${s.payments.url}${path}`, { headers: { 'x-admin-token': s.payments.config.adminToken } }).then(async (r) => ({ status: r.status, body: (await r.json()) as any }));
 

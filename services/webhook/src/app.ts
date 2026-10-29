@@ -10,6 +10,7 @@ import { type RunningConsumer, createKafka, ensureTopics, startIdempotentConsume
 import { AdminGuard, MerchantGuard, type MerchantAuthenticator } from './auth.js';
 import { DEFAULT_WEBHOOK_CONFIG, type WebhookConfig } from './config.js';
 import type { WebhookDB } from './db-schema.js';
+import { AuditService } from './audit.service.js';
 import { DeliveriesService } from './deliveries.service.js';
 import { DeliveryWorker } from './delivery-worker.js';
 import { EndpointsService } from './endpoints.service.js';
@@ -62,6 +63,7 @@ export async function startWebhook(opts: WebhookAppOptions): Promise<RunningWebh
       { provide: APP_FILTER, useClass: ErrorFilter },
       MerchantGuard,
       AdminGuard,
+      AuditService,
       EndpointsService,
       DeliveriesService,
     ],

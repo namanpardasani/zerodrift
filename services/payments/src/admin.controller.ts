@@ -1,9 +1,10 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { Body, Controller, Get, HttpCode, Inject, Param, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Inject, Ip, Param, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import * as s from './http.schemas.js';
 import { AdminGuard, MerchantsService } from './merchants.service.js';
 import { AdminQueries } from './admin-queries.js';
+import { AuditService } from './audit.service.js';
 import { ReconciliationFeed } from './reconciliation-feed.js';
 import { RecoveryService } from './recovery.service.js';
 import { SagaService } from './saga.service.js';
@@ -19,12 +20,13 @@ export class AdminController {
     private readonly recovery: RecoveryService,
     private readonly feed: ReconciliationFeed,
     private readonly queries: AdminQueries,
+    private readonly audit: AuditService,
   ) {}
 
   @Post('admin/merchants')
   @UseGuards(AdminGuard)
-  async createMerchant(@Body() body: unknown, @Res({ passthrough: true }) res: Response) {
-    const r = await this.merchants.create(s.createMerchantBody.parse(body));
+  async createMerchant(@Body() body: unknown, @Ip() ip: string, @Res({ passthrough: true }) res: Response) {
+    const r = await this.merchants.create(s.createMerchantBody.parse(body), ip);
     res.status(201);
     return { ...r.merchant, apiKey: r.apiKey, note: 'Store this API key now; it cannot be shown again.' };
   }
@@ -63,8 +65,16 @@ export class AdminController {
   @Post('internal/recovery/run')
   @UseGuards(AdminGuard)
   @HttpCode(200)
-  async runRecovery() {
-    return this.recovery.runOnce();
+  async runRecovery(@Ip() ip: string) {
+    const summary = await this.recovery.runOnce();
+    await this.audit.write({ actor: 'admin', action: 'recovery.run', resourceType: 'recovery', ip, details: { ...summary } });
+    return summary;
+  }
+
+  @Get('admin/audit-logs')
+  @UseGuards(AdminGuard)
+  async auditLogs(@Query() q: Record<string, string>) {
+    return { logs: await this.audit.list({ merchantId: q.merchantId, action: q.action, limit: q.limit ? Number(q.limit) : undefined }) };
   }
 }
 

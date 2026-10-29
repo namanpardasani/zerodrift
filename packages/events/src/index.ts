@@ -22,6 +22,8 @@ export const envelopeSchema = z.object({
   occurredAt: z.iso.datetime(),
   /** Correlation id propagated from the originating HTTP request for tracing. */
   correlationId: z.string().optional(),
+  /** W3C trace context of the operation that caused this event, so async consumers continue the same trace. Optional + validated. */
+  traceparent: z.string().regex(/^00-[0-9a-f]{32}-[0-9a-f]{16}-0[01]$/).optional(),
   payload: z.unknown(),
 });
 
@@ -80,7 +82,7 @@ export function makeEvent<T extends EventType>(
   aggregateType: string,
   aggregateId: string,
   payload: EventPayload<T>,
-  opts: { eventId?: string; correlationId?: string; occurredAt?: Date } = {},
+  opts: { eventId?: string; correlationId?: string; traceparent?: string; occurredAt?: Date } = {},
 ): EventEnvelope {
   eventPayloads[type].parse(payload);
   return envelopeSchema.parse({
@@ -91,6 +93,7 @@ export function makeEvent<T extends EventType>(
     aggregateId,
     occurredAt: (opts.occurredAt ?? new Date()).toISOString(),
     correlationId: opts.correlationId,
+    traceparent: opts.traceparent,
     payload,
   });
 }
