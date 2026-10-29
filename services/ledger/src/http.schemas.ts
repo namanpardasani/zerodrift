@@ -70,3 +70,11 @@ export const postTransactionBody = z.object({
     .min(2)
     .max(20),
 });
+
+export const listTransactionsQuery = z.object({
+  type: z.enum(['payment', 'transfer', 'refund', 'topup', 'fee', 'reversal']).optional(),
+  from: z.string().datetime().optional(),
+  to: z.string().datetime().optional(),
+  after: z.string().max(100).optional(),
+  limit: z.coerce.number().int().positive().max(2_000).optional(),
+});

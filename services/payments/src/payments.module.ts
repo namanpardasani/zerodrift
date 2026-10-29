@@ -10,6 +10,7 @@ import { AdminGuard, MerchantAuthGuard, MerchantsService } from './merchants.ser
 import { PaymentsController } from './payments.controller.js';
 import { type Db, PaymentsRepo } from './payments.repo.js';
 import { PaymentsService } from './payments.service.js';
+import { ReconciliationFeed } from './reconciliation-feed.js';
 import { RecoveryService } from './recovery.service.js';
 import { RefundsService } from './refunds.service.js';
 import { SagaService } from './saga.service.js';
@@ -59,6 +60,7 @@ export class PaymentsModule implements OnApplicationBootstrap, OnApplicationShut
         PaymentsService,
         RefundsService,
         RecoveryService,
+        ReconciliationFeed,
       ],
     };
   }

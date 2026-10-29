@@ -127,9 +127,22 @@ services:
     <<: *service
     build: { context: ., args: { SERVICE: reconciliation } }
     ports: ['3004:3004']
+    depends_on:
+      postgres: { condition: service_healthy }
+      ledger: { condition: service_started }
+      payments: { condition: service_started }
+      mock-gateway: { condition: service_started }
     environment:
       NODE_ENV: development
       DATABASE_URL: postgres://zerodrift:zerodrift@postgres:5432/reconciliation
+      LEDGER_URL: http://ledger:3001
+      PAYMENTS_URL: http://payments:3002
+      GATEWAY_URL: http://mock-gateway:3005
+      PAYMENTS_ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-admin-token}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-admin-token}
+      # short intervals so a demo shows scheduled runs quickly (production would be minutes/hours)
+      INTERNAL_RUN_INTERVAL_SECONDS: '60'
+      EXTERNAL_RUN_INTERVAL_SECONDS: '120'
 
   mock-gateway:
     restart: unless-stopped

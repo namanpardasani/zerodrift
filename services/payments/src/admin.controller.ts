@@ -1,8 +1,9 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { Body, Controller, Get, HttpCode, Inject, Post, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Inject, Post, Query, Req, Res, UseGuards } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import * as s from './http.schemas.js';
 import { AdminGuard, MerchantsService } from './merchants.service.js';
+import { ReconciliationFeed } from './reconciliation-feed.js';
 import { RecoveryService } from './recovery.service.js';
 import { SagaService } from './saga.service.js';
 import { isSettled } from './state-machine.js';
@@ -15,6 +16,7 @@ export class AdminController {
   constructor(
     private readonly merchants: MerchantsService,
     private readonly recovery: RecoveryService,
+    private readonly feed: ReconciliationFeed,
   ) {}
 
   @Post('admin/merchants')
@@ -29,6 +31,13 @@ export class AdminController {
   @UseGuards(AdminGuard)
   async listMerchants() {
     return { merchants: await this.merchants.list() };
+  }
+
+  /** Read-only feed for the reconciliation service: payments (with refunds and ledger links) in a time window. */
+  @Get('internal/reconciliation/payments')
+  @UseGuards(AdminGuard)
+  async reconciliationPayments(@Query() q: Record<string, string>) {
+    return this.feed.payments({ from: q.from, to: q.to, after: q.after, limit: q.limit ? Number(q.limit) : undefined });
   }
 
   @Post('internal/recovery/run')

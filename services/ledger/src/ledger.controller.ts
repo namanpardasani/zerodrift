@@ -133,6 +133,13 @@ export class LedgerController {
     return { expired: await this.holds.expireDueHolds() };
   }
 
+  /** Read-only transaction feed for reconciliation. Internal network only. */
+  @Get('internal/transactions')
+  async listTransactions(@Query() q: unknown) {
+    const p = parse(s.listTransactionsQuery, q);
+    return this.ledger.listTransactions({ type: p.type, from: p.from ? new Date(p.from) : undefined, to: p.to ? new Date(p.to) : undefined, after: p.after, limit: p.limit });
+  }
+
   @Get('internal/invariants')
   async checkInvariants() {
     return this.invariants.check();
