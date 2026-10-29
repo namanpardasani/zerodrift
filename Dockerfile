@@ -8,7 +8,9 @@ RUN pnpm install --frozen-lockfile && pnpm -r build
 
 FROM node:24-slim
 ARG SERVICE
-ENV SERVICE=${SERVICE} NODE_ENV=production
+# DNS lookups run on libuv's threadpool (default 4 threads). A few slow lookups of a dead dependency's name
+# (Docker DNS can take seconds to fail) would otherwise block EVERY other outbound call of the service.
+ENV SERVICE=${SERVICE} NODE_ENV=production UV_THREADPOOL_SIZE=32
 WORKDIR /app
 COPY --from=build /app /app
 WORKDIR /app/services/${SERVICE}

@@ -58,12 +58,14 @@ const toxicBody = z.object({
 });
 
 const enabledBody = z.object({ enabled: z.boolean() });
+const serviceBody = z.object({ restartAfterSeconds: z.number().int().min(0).max(120).optional() }).default({});
 
 /** Dev-only fault injection API, driven by the dashboard's chaos panel. */
 @Controller('chaos')
 @UseGuards(ChaosGuard)
 export class ChaosController {
   private events: ChaosEvent[] = [];
+  private readonly timers = new Set<NodeJS.Timeout>();
 
   constructor(@Inject(CHAOS_DEPS) private readonly deps: ChaosDeps) {}
 
@@ -90,10 +92,15 @@ export class ChaosController {
     return { events: this.events };
   }
 
-  /** kill (SIGKILL: a crash), restart, pause (freeze: a hang), unpause, stop, start. Only whitelisted services. */
+  /**
+   * kill (SIGKILL: a crash), restart, pause (freeze: a hang), unpause, stop, start. Only whitelisted services.
+   * A single Docker host has no orchestrator to revive a crashed service (Kubernetes does, Phase 9), so
+   * `restartAfterSeconds` on kill/stop emulates one: the service is started again after that delay.
+   */
   @Post('services/:name/:action')
   @HttpCode(200)
-  async serviceAction(@Param('name') name: string, @Param('action') action: string) {
+  async serviceAction(@Param('name') name: string, @Param('action') action: string, @Body() body: unknown) {
+    const { restartAfterSeconds } = serviceBody.parse(body ?? {});
     if (!(CHAOS_TARGETS as readonly string[]).includes(name)) throw new DomainError('target_not_allowed', `"${name}" cannot be targeted by chaos`, 403);
     if (!(CONTAINER_ACTIONS as readonly string[]).includes(action)) throw new DomainError('unknown_action', `unknown action "${action}"`, 400);
     try {
@@ -101,8 +108,19 @@ export class ChaosController {
     } catch (err) {
       throw new DomainError('chaos_failed', (err as Error).message, 502);
     }
-    this.log(action, name);
-    return { ok: true, service: name, action };
+    this.log(action, name, restartAfterSeconds ? { restartAfterSeconds } : undefined);
+    if (restartAfterSeconds && (action === 'kill' || action === 'stop')) {
+      const timer = setTimeout(() => {
+        this.timers.delete(timer);
+        this.deps.docker
+          .act(name, 'start')
+          .then(() => this.log('auto_restart', name))
+          .catch((e: Error) => this.log('auto_restart_failed', name, { error: e.message }));
+      }, restartAfterSeconds * 1000);
+      timer.unref();
+      this.timers.add(timer);
+    }
+    return { ok: true, service: name, action, ...(restartAfterSeconds ? { restartsInSeconds: restartAfterSeconds } : {}) };
   }
 
   @Put('gateway')
@@ -154,6 +172,8 @@ export class ChaosController {
   @Post('reset')
   @HttpCode(200)
   async reset() {
+    for (const t of this.timers) clearTimeout(t); // pending auto-restarts are moot: reset starts everything itself
+    this.timers.clear();
     const errors: string[] = [];
     await this.deps.gateway.reset().catch((e: Error) => errors.push(`gateway: ${e.message}`));
     await this.deps.toxiproxy.reset().catch((e: Error) => errors.push(`toxiproxy: ${e.message}`));

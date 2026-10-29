@@ -215,10 +215,68 @@ describe('metrics (fixed queries only)', () => {
   });
 });
 
+describe('a dead dependency must not slow the others down', () => {
+  it('Upstream fails fast for a short while after a connection failure, then tries again', async () => {
+    const { Upstream } = await import('../src/upstream.js');
+    const dead = new Upstream('thing', 'http://127.0.0.1:9', {}, 2_000, 300);
+    await expect(dead.request('GET', '/x')).rejects.toMatchObject({ code: 'upstream_unavailable' });
+    const t = Date.now();
+    await expect(dead.request('GET', '/x')).rejects.toMatchObject({ message: expect.stringContaining('failing fast') });
+    expect(Date.now() - t).toBeLessThan(50); // answered instantly, no connection attempt
+    await new Promise((r) => setTimeout(r, 350));
+    await expect(dead.request('GET', '/x')).rejects.toMatchObject({ message: expect.not.stringContaining('failing fast') }); // window over: a real attempt again
+  });
+
+  it('metrics: when Prometheus is down it is queried once per window, not on every poll', async () => {
+    prom.seen.length = 0;
+    prom.handler = () => ({ status: 503, body: {} });
+    const fresh = await startDashboardApi({ port: 0, logLevel: 'silent', config: cfg({ staticDir: undefined }) });
+    try {
+      const t = (await call('/auth/login', { base: fresh.url, method: 'POST', token: null, body: JSON.stringify({ username: 'admin', password: 'correct-horse' }) })).body.token;
+      expect((await call('/api/metrics/summary', { base: fresh.url, token: t })).body.available).toBe(false);
+      const firstRound = prom.seen.length;
+      expect(firstRound).toBeGreaterThan(0);
+      for (let i = 0; i < 5; i++) await call('/api/metrics/summary', { base: fresh.url, token: t });
+      await call('/api/metrics/range/throughput', { base: fresh.url, token: t });
+      expect(prom.seen.length).toBeLessThanOrEqual(firstRound + 11); // no new storm: at most the in-flight first round
+      expect(prom.seen.length).toBeLessThan(firstRound * 2);
+    } finally {
+      await fresh.close();
+      prom.handler = () => ({ status: 200, body: {} });
+    }
+  });
+
+  it('metrics: results are cached for a few seconds so several open pages share one round of queries', async () => {
+    prom.handler = () => ({ status: 200, body: { status: 'success', data: { result: [] } } });
+    const fresh = await startDashboardApi({ port: 0, logLevel: 'silent', config: cfg({ staticDir: undefined }) });
+    try {
+      const t = (await call('/auth/login', { base: fresh.url, method: 'POST', token: null, body: JSON.stringify({ username: 'admin', password: 'correct-horse' }) })).body.token;
+      prom.seen.length = 0;
+      await call('/api/metrics/summary', { base: fresh.url, token: t });
+      const one = prom.seen.length;
+      await call('/api/metrics/summary', { base: fresh.url, token: t });
+      await call('/api/metrics/summary', { base: fresh.url, token: t });
+      expect(prom.seen.length).toBe(one);
+    } finally {
+      await fresh.close();
+    }
+  });
+});
+
 describe('chaos panel backend', () => {
   it('reports chaos as disabled when the controller says 404 (production-like), otherwise passes calls through', async () => {
     chaos.handler = () => ({ status: 404, body: { message: 'Not Found' } });
     expect((await call('/api/chaos/status')).body).toEqual({ enabled: false });
+    // an UNREACHABLE controller is an error, not "disabled"
+    const down = await startDashboardApi({ port: 0, logLevel: 'silent', config: cfg({ upstreams: { ledger: ledger.url, payments: payments.url, webhook: webhook.url, reconciliation: recon.url, chaos: 'http://127.0.0.1:9', prometheus: prom.url }, staticDir: undefined }) });
+    try {
+      const t = (await call('/auth/login', { base: down.url, method: 'POST', token: null, body: JSON.stringify({ username: 'admin', password: 'correct-horse' }) })).body.token;
+      const r = await call('/api/chaos/status', { base: down.url, token: t });
+      expect(r.status).toBe(502);
+      expect(r.body.error.details.service).toBe('chaos-controller');
+    } finally {
+      await down.close();
+    }
     chaos.handler = (m, url) => ({ status: 200, body: { enabled: true, echo: `${m} ${url}` } });
     expect((await call('/api/chaos/status')).body.enabled).toBe(true);
     const kill = await call('/api/chaos/services/payments/kill', { method: 'POST', body: '{}' });

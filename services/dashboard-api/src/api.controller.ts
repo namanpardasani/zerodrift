@@ -226,9 +226,11 @@ export class ApiController {
   // ------------------------------------------------------------------ chaos (proxied; the controller is dev-only)
   @Get('chaos/status')
   async chaosStatus() {
-    const r = await this.chaos.request('GET', '/chaos/status').catch(() => null);
-    if (!r || r.status === 404) return { enabled: false };
-    if (r.status >= 400) throw new DomainError('upstream_error', 'chaos-controller error', 502);
+    // 404 means "chaos is switched off here" (the controller hides itself). A controller that is merely
+    // unreachable is NOT the same thing: let that surface as an error instead of claiming it is disabled.
+    const r = await this.chaos.request('GET', '/chaos/status');
+    if (r.status === 404) return { enabled: false };
+    if (r.status >= 400) throw new DomainError('upstream_error', `chaos-controller answered HTTP ${r.status}`, 502);
     return r.data;
   }
 
@@ -240,8 +242,8 @@ export class ApiController {
 
   @Post('chaos/services/:name/:action')
   @HttpCode(200)
-  async chaosService(@Param('name') name: string, @Param('action') action: string, @Res({ passthrough: true }) res: Response) {
-    const r = await this.chaos.request('POST', `/chaos/services/${encodeURIComponent(name)}/${encodeURIComponent(action)}`, {});
+  async chaosService(@Param('name') name: string, @Param('action') action: string, @Body() body: unknown, @Res({ passthrough: true }) res: Response) {
+    const r = await this.chaos.request('POST', `/chaos/services/${encodeURIComponent(name)}/${encodeURIComponent(action)}`, body ?? {});
     res.status(r.status);
     return r.data;
   }

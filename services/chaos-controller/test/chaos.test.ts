@@ -141,6 +141,30 @@ describe('container chaos (Docker API)', () => {
     expect(byName['chaos-controller']).toBeUndefined();
   });
 
+  it('kill with restartAfterSeconds emulates an orchestrator: the service is started again after the delay', async () => {
+    docker.calls.length = 0;
+    const r = await api('/chaos/services/ledger/kill', { method: 'POST', body: JSON.stringify({ restartAfterSeconds: 1 }) });
+    expect(r.body).toMatchObject({ ok: true, restartsInSeconds: 1 });
+    expect(docker.calls).toContain('POST /containers/id-ledger/kill');
+    expect(docker.containers.find((c) => c.Id === 'id-ledger')!.State).toBe('exited');
+    await new Promise((res) => setTimeout(res, 1_500));
+    expect(docker.calls).toContain('POST /containers/id-ledger/start');
+    expect(docker.containers.find((c) => c.Id === 'id-ledger')!.State).toBe('running');
+    const actions = (await api('/chaos/events')).body.events.map((e: { action: string }) => e.action);
+    expect(actions.slice(0, 2)).toEqual(['auto_restart', 'kill']);
+    // validation, and "no restartAfterSeconds" means the service stays down
+    expect((await api('/chaos/services/ledger/kill', { method: 'POST', body: JSON.stringify({ restartAfterSeconds: 9999 }) })).status).toBe(400);
+    await api('/chaos/services/ledger/start', { method: 'POST', body: '{}' });
+  });
+
+  it('reset cancels pending auto-restarts', async () => {
+    await api('/chaos/services/ledger/kill', { method: 'POST', body: JSON.stringify({ restartAfterSeconds: 1 }) });
+    await api('/chaos/reset', { method: 'POST', body: '{}' });
+    docker.calls.length = 0;
+    await new Promise((res) => setTimeout(res, 1_400));
+    expect(docker.calls.filter((c) => c.includes('/start') && c.includes('id-ledger'))).toEqual([]); // the timer was cancelled
+  });
+
   it('reports a clear 502 when Docker cannot do it (unknown container)', async () => {
     docker.containers.splice(docker.containers.findIndex((c) => c.Labels['com.docker.compose.service'] === 'webhook'), 1);
     const r = await api('/chaos/services/webhook/kill', { method: 'POST', body: '{}' });
@@ -174,7 +198,10 @@ describe('gateway faults and network chaos', () => {
   });
 
   it('reset puts everything back: gateway faults cleared, toxics removed, paused/stopped services resumed', async () => {
+    // set up its OWN state (tests above may have reset things): kafka frozen, webhook dead, payments healthy
+    docker.containers.find((c) => c.Id === 'id-kafka')!.State = 'paused';
     docker.containers.push({ Id: 'id-webhook', State: 'exited', Status: 'Exited', Labels: { 'com.docker.compose.service': 'webhook', 'com.docker.compose.project': 'zerodrift' } });
+    docker.containers.find((c) => c.Id === 'id-payments')!.State = 'running';
     docker.calls.length = 0;
     const r = await api('/chaos/reset', { method: 'POST', body: '{}' });
     expect(r.body).toEqual({ ok: true, errors: [] });

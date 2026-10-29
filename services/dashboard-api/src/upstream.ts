@@ -7,14 +7,26 @@ export interface UpstreamResult<T = unknown> {
 
 /** Calls one internal service on behalf of the dashboard. Outages become a clear 502 naming the service. */
 export class Upstream {
+  /** While set, calls fail immediately instead of waiting on a service that just proved unreachable. */
+  private downUntil = 0;
+
   constructor(
     readonly name: string,
     private readonly baseUrl: string,
     private readonly headers: Record<string, string> = {},
     private readonly timeoutMs = 8_000,
+    /**
+     * After a connection-level failure, refuse further calls for this long. Why: a dead service can make
+     * every call wait seconds (slow DNS failure, connect timeout); with many polling pages that piles up
+     * and starves calls to HEALTHY services. Failing fast keeps the rest of the console responsive.
+     */
+    private readonly failFastMs = 3_000,
   ) {}
 
   async request<T = unknown>(method: string, path: string, body?: unknown, extraHeaders: Record<string, string> = {}): Promise<UpstreamResult<T>> {
+    if (Date.now() < this.downUntil) {
+      throw new DomainError('upstream_unavailable', `${this.name} is not reachable (failing fast after a recent failure)`, 502, { service: this.name });
+    }
     let res: Response;
     try {
       res = await fetch(`${this.baseUrl}${path}`, {
@@ -24,6 +36,7 @@ export class Upstream {
         signal: AbortSignal.timeout(this.timeoutMs),
       });
     } catch (err) {
+      this.downUntil = Date.now() + this.failFastMs;
       throw new DomainError('upstream_unavailable', `${this.name} is not reachable (${(err as Error).name === 'TimeoutError' ? 'timed out' : 'connection failed'})`, 502, { service: this.name });
     }
     const text = await res.text();

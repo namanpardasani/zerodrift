@@ -94,11 +94,13 @@ services:
       postgres: { condition: service_healthy }
       ledger: { condition: service_started }
       mock-gateway: { condition: service_started }
+      toxiproxy: { condition: service_started }
     environment:
       NODE_ENV: development
       DATABASE_URL: postgres://zerodrift:zerodrift@postgres:5432/payments
-      LEDGER_URL: http://ledger:3001
-      GATEWAY_URL: http://mock-gateway:3005
+      # payments reaches the ledger and the bank THROUGH Toxiproxy so the chaos panel can inject real network faults
+      LEDGER_URL: http://toxiproxy:13001
+      GATEWAY_URL: http://toxiproxy:13005
       KAFKA_BROKERS: kafka:9092
       PUBLIC_URL: http://payments:3002
       ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-admin-token}
@@ -165,7 +167,48 @@ services:
     restart: unless-stopped
     build: { context: ., args: { SERVICE: chaos-controller } }
     ports: ['3006:3006']
-    environment: { NODE_ENV: development, CHAOS_ENABLED: 'true' }
+    environment:
+      NODE_ENV: development
+      CHAOS_ENABLED: 'true'
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-admin-token}
+      COMPOSE_PROJECT: zerodrift
+      GATEWAY_URL: http://mock-gateway:3005
+      TOXIPROXY_URL: http://toxiproxy:8474
+    # DEV ONLY: the Docker socket lets this container kill/pause other containers (that is the point),
+    # and is effectively root on the host. The controller refuses to run when NODE_ENV=production.
+    volumes: ['/var/run/docker.sock:/var/run/docker.sock']
+
+  dashboard-api:
+    restart: unless-stopped
+    build: { context: ., args: { SERVICE: dashboard-api } }
+    ports: ['3008:3008']
+    depends_on: [ledger, payments, webhook, reconciliation]
+    environment:
+      NODE_ENV: development
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-admin-token}
+      # DEV-ONLY credentials. In production the service refuses to start with these defaults.
+      JWT_SECRET: ${JWT_SECRET:-dev-only-jwt-secret-change-me-0123456789}
+      DASHBOARD_USER: ${DASHBOARD_USER:-admin}
+      DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD:-zerodrift}
+      LEDGER_URL: http://ledger:3001
+      PAYMENTS_URL: http://payments:3002
+      WEBHOOK_URL: http://webhook:3003
+      RECONCILIATION_URL: http://reconciliation:3004
+      CHAOS_URL: http://chaos-controller:3006
+      PROMETHEUS_URL: http://prometheus:9090
+
+  demo-shop:
+    restart: unless-stopped
+    build: { context: ., args: { SERVICE: demo-shop } }
+    ports: ['3009:3009']
+    depends_on: [payments, webhook]
+    environment:
+      NODE_ENV: development
+      PORT: '3009'
+      PAYMENTS_URL: http://payments:3002
+      WEBHOOK_URL: http://webhook:3003
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-admin-token}
+      PUBLIC_URL: http://demo-shop:3009
 
 volumes:
   pgdata:

@@ -34,19 +34,36 @@ interface PromVector {
 
 @Injectable()
 export class MetricsService {
+  /** Prometheus is optional for the console: after a failure, stop trying for a while (see queryOnce). */
+  private downUntil = 0;
+  private summaryCache?: { at: number; value: Awaited<ReturnType<MetricsService['computeSummary']>> };
+
   constructor(@Inject(CONFIG) private readonly config: DashboardConfig) {}
 
   private async query(path: string, params: Record<string, string>): Promise<PromVector | null> {
+    // Negative cache: the summary fires ~11 queries at once. If Prometheus is down (and resolving its name
+    // is slow), retrying on every poll would tie up DNS/connection capacity that other calls need.
+    if (Date.now() < this.downUntil) return null;
     try {
-      const res = await fetch(`${this.config.upstreams.prometheus}${path}?${new URLSearchParams(params)}`, { signal: AbortSignal.timeout(5_000) });
-      if (!res.ok) return null;
+      const res = await fetch(`${this.config.upstreams.prometheus}${path}?${new URLSearchParams(params)}`, { signal: AbortSignal.timeout(3_000) });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       return (await res.json()) as PromVector;
     } catch {
+      this.downUntil = Date.now() + 10_000;
       return null; // Prometheus down: the page shows "unavailable", it does not break
     }
   }
 
+  /** Cached for a few seconds so several open pages (or tabs) share one round of queries. */
   async summary() {
+    const hit = this.summaryCache;
+    if (hit && Date.now() - hit.at < 4_000) return hit.value;
+    const value = await this.computeSummary();
+    this.summaryCache = { at: Date.now(), value };
+    return value;
+  }
+
+  private async computeSummary() {
     const out: Record<string, { labels: Record<string, string>; value: number }[]> = {};
     let available = true;
     await Promise.all(
