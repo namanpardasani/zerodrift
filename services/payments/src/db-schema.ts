@@ -64,6 +64,9 @@ export interface IdempotencyKeysTable {
   response_snapshot: ColumnType<unknown, string | null | undefined, string | null>;
   created_at: Generated<Date>;
   expires_at: ColumnType<Date, Date | string, Date | string>;
+  /** how many times the same request was sent again and answered from this key */
+  duplicates_absorbed: Generated<number>;
+  last_duplicate_at: ColumnType<Date | null, Date | string | null | undefined, Date | string | null>;
 }
 
 export interface RefundsTable {

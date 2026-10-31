@@ -8,6 +8,8 @@ export interface AdminPaymentView extends PaymentView {
   merchantName: string;
   ledgerTxId: string | null;
   gatewayRef: string | null;
+  /** the customer-facing idempotency key of the create request, for the operator's eyes */
+  idempotencyKey: string;
 }
 
 /** Cross-merchant, read-only queries for the operator dashboard (admin token only). */
@@ -31,13 +33,25 @@ export class AdminQueries {
     if (q.merchantId) query = query.where('p.merchant_id', '=', q.merchantId);
     if (q.before) query = query.where('p.created_at', '<', new Date(q.before));
     const rows = await query.execute();
-    return rows.map((r) => ({ ...toView(r), merchantName: r.merchant_name, ledgerTxId: r.ledger_tx_id, gatewayRef: r.gateway_ref }));
+    return rows.map((r) => ({ ...toView(r), merchantName: r.merchant_name, ledgerTxId: r.ledger_tx_id, gatewayRef: r.gateway_ref, idempotencyKey: r.idempotency_key }));
   }
 
-  async get(id: string): Promise<AdminPaymentView & { events: Awaited<ReturnType<PaymentsRepo['events']>>; refunds: Awaited<ReturnType<PaymentsRepo['refundsFor']>> }> {
+  async get(id: string): Promise<AdminPaymentView & { duplicatesAbsorbed: number; lastDuplicateAt: string | null; events: Awaited<ReturnType<PaymentsRepo['events']>>; refunds: Awaited<ReturnType<PaymentsRepo['refundsFor']>> }> {
     const row = await this.db.selectFrom('payments as p').innerJoin('merchants as m', 'm.id', 'p.merchant_id').selectAll('p').select('m.name as merchant_name').where('p.id', '=', id).executeTakeFirst();
     if (!row) throw Errors.notFound('Payment', id);
-    return { ...toView(row), merchantName: row.merchant_name, ledgerTxId: row.ledger_tx_id, gatewayRef: row.gateway_ref, events: await this.repo.events(id), refunds: await this.repo.refundsFor(id) };
+    const idem = await this.db.selectFrom('idempotency_keys').select(['duplicates_absorbed', 'last_duplicate_at']).where('merchant_id', '=', row.merchant_id).where('key', '=', row.idempotency_key).executeTakeFirst();
+    return {
+      ...toView(row),
+      merchantName: row.merchant_name,
+      ledgerTxId: row.ledger_tx_id,
+      gatewayRef: row.gateway_ref,
+      idempotencyKey: row.idempotency_key,
+      /** how many identical requests (same key) were answered from the first one instead of running again */
+      duplicatesAbsorbed: idem?.duplicates_absorbed ?? 0,
+      lastDuplicateAt: idem?.last_duplicate_at ? idem.last_duplicate_at.toISOString() : null,
+      events: await this.repo.events(id),
+      refunds: await this.repo.refundsFor(id),
+    };
   }
 
   /** Counts by status (all time and last 24h) and in-flight work, for the overview page. */

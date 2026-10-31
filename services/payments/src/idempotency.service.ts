@@ -12,7 +12,7 @@ export function hashRequest(operation: string, params: unknown): string {
   return createHash('sha256').update(`${operation}:${canonical}`).digest('hex');
 }
 
-export type Begin = { kind: 'claimed' } | { kind: 'replay'; status: number; body: unknown };
+export type Begin = { kind: 'claimed' } | { kind: 'replay'; status: number; body: unknown } | { kind: 'in_progress' };
 
 /**
  * Merchant-level idempotency (table `idempotency_keys`, UNIQUE(merchant_id, key)).
@@ -54,8 +54,12 @@ export class IdempotencyService {
 
     const existing = await trx.selectFrom('idempotency_keys').selectAll().where('merchant_id', '=', merchantId).where('key', '=', key).executeTakeFirstOrThrow();
     if (existing.request_hash !== requestHash) throw Errors.idempotencyMismatch(key);
+    // A genuine duplicate (same key, same request): count it, so the operator console can show "a duplicate was absorbed".
+    // The update commits with the caller's transaction, which is why "in progress" is RETURNED, not thrown here:
+    // throwing would roll the counter back. The caller turns it into the 409 after its transaction ended.
+    await trx.updateTable('idempotency_keys').set({ duplicates_absorbed: sql<number>`duplicates_absorbed + 1`, last_duplicate_at: sql<Date>`now()` }).where('merchant_id', '=', merchantId).where('key', '=', key).execute();
     if (existing.status === 'completed') return { kind: 'replay', status: existing.response_status!, body: existing.response_snapshot };
-    throw Errors.requestInProgress();
+    return { kind: 'in_progress' };
   }
 
   async attach(trx: Trx, merchantId: string, key: string, resourceId: string): Promise<void> {

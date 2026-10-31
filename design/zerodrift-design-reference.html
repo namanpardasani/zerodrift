@@ -1,0 +1,942 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zerodrift design reference</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   ZERODRIFT DESIGN REFERENCE
+   Two worlds:
+   - STAGE (teenage-engineering feel): black, thin white line art,
+     big light lowercase type, one hardware object, orange signal.
+   - PAPER (increase feel): calm light product UI, code + transfer
+     card, status timelines with dots, crisp numbers.
+   Every animation has a job. Port these to React (motion, NumberFlow).
+   ============================================================ */
+:root{
+  --stage:#0B0B0B; --stage-2:#151515; --stage-3:#1F1F1F;
+  --on-stage:#EDEDEA; --on-stage-2:#A3A39E;
+  --hw:#DCDCD8; --hw-2:#C6C6C1; --hw-3:#A9A9A4; --hw-ink:#1A1A1A;
+  --paper:#F3F3F0; --card:#FFFFFF; --ink:#111418; --ink-2:#454B57; --muted:#5F6571; --rule:#E2E2DE;
+  --navy:#172130; --code-text:#E8EDF5; --code-kw:#7DB4FF; --code-str:#4FE3B5; --code-dim:#7C8BA1; --code-ln:#55657C;
+  --orange:#FF5A1F; --orange-edge:#B83E0E;
+  --settled:#0F9F73; --settled-dot:#22C995; --pending:#D9A400; --pending-dot:#F2C230; --failed:#D93A3F;
+  --stamp:#2B4C8F;
+  --font:"Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono:"Geist Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --ease:cubic-bezier(.2,.8,.2,1);
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:#E7E7E3;color:var(--ink);font-family:var(--font);font-size:15px;line-height:1.5}
+button{font:inherit;cursor:pointer}
+:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* ---------- document chrome ---------- */
+.doc-head{max-width:1280px;margin:0 auto;padding:40px 24px 28px;display:flex;flex-wrap:wrap;gap:24px;justify-content:space-between;align-items:flex-end}
+.doc-head h1{margin:0;font-weight:300;font-size:40px;letter-spacing:-.03em;line-height:1}
+.doc-head p{margin:10px 0 0;max-width:560px;color:var(--ink-2)}
+.swatches{display:flex;flex-wrap:wrap;gap:10px}
+.sw{display:flex;flex-direction:column;gap:6px;width:92px;font-family:var(--mono);font-size:11px;color:var(--ink-2)}
+.sw i{display:block;height:40px;border-radius:8px;border:1px solid rgba(0,0,0,.08)}
+.plate{max-width:1280px;margin:0 auto 64px;padding:0 24px}
+.plate-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px;font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:#4E535B}
+.plate-bar small{text-transform:none;letter-spacing:0;color:#5D626A;font-size:12px}
+.replay{border:1px solid #BDBDB8;background:transparent;border-radius:6px;padding:6px 10px;font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#33373D}
+.replay:hover{background:#DCDCD7}
+.screen{border-radius:16px;overflow:hidden;border:1px solid #D2D2CD;box-shadow:0 30px 60px -40px rgba(0,0,0,.45)}
+.note{margin:12px 2px 0;font-size:13px;color:#555A62;max-width:860px}
+
+/* ---------- odometer (port to NumberFlow) ---------- */
+.odo{display:inline-flex;align-items:baseline;line-height:1.1;white-space:nowrap}
+.odo-col{display:inline-block;height:1.1em;overflow:hidden;vertical-align:bottom}
+.odo-strip{display:flex;flex-direction:column;transition:transform 1s var(--ease)}
+.odo-strip span{height:1.1em;display:block;text-align:center}
+.odo-ch{display:inline-block}
+
+/* ================= PLATE 01: LANDING (stage) ================= */
+.landing{background:radial-gradient(120% 70% at 50% 78%, #262626 0%, #0B0B0B 62%);color:var(--on-stage)}
+.te-nav{display:grid;grid-template-columns:auto repeat(4,minmax(0,1fr)) 170px 92px;gap:24px;padding:28px 32px;align-items:start}
+.wordmark{font-weight:300;font-size:34px;line-height:1.02;letter-spacing:-.02em;color:var(--on-stage);text-decoration:none}
+.te-item{display:flex;gap:12px;color:var(--on-stage);text-decoration:none}
+.te-item svg{flex:0 0 46px;height:46px}
+.te-item b{display:block;font-weight:300;font-size:26px;line-height:1;letter-spacing:-.01em}
+.te-item span{display:block;margin-top:8px;font-size:13px;line-height:1.35;color:var(--on-stage-2)}
+.te-item:hover b{color:#fff}
+.te-micro{font-family:var(--mono);font-size:10px;line-height:1.45;color:var(--on-stage-2)}
+.hero{text-align:center;padding:36px 24px 0}
+.hero h2{margin:0;font-weight:300;font-size:clamp(40px,7vw,92px);letter-spacing:-.045em;line-height:.95}
+.hero p{margin:16px auto 0;max-width:560px;font-family:var(--mono);font-size:13px;color:var(--on-stage-2)}
+.device{position:relative;max-width:860px;margin:6px auto 0}
+.device svg{display:block;width:100%;height:auto}
+.receipt-out{position:absolute;left:47.9%;width:25.26%;white-space:nowrap;bottom:64.76%;height:0;overflow:hidden;background:#FCFBF7;color:#2A2A2A;
+  font-family:var(--mono);font-size:clamp(5px,1.05vw,9.5px);line-height:1.45;padding:0 8%;box-shadow:0 -6px 18px rgba(0,0,0,.35);
+  transition:height 2.8s steps(14,end)}
+.receipt-out.on{height:29%}
+.receipt-out div:first-child{padding-top:8%}
+.led-blink{animation:ledblink 2.4s steps(1,end) infinite}
+@keyframes ledblink{0%,70%{opacity:1}71%,100%{opacity:.25}}
+.hero-foot{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:24px;padding:12px 32px 40px}
+.spec{font-family:var(--mono);font-size:11px;line-height:1.7;color:var(--on-stage-2);margin:0;padding:0;list-style:none}
+.spec li span{color:var(--on-stage)}
+.ctas{display:flex;flex-wrap:wrap;gap:12px}
+.btn-hw{border:0;border-radius:6px;background:var(--orange);color:#140601;font-weight:500;font-size:15px;padding:14px 18px;box-shadow:0 4px 0 var(--orange-edge);transition:transform .12s, box-shadow .12s}
+.btn-hw:hover{transform:translateY(-1px);box-shadow:0 5px 0 var(--orange-edge)}
+.btn-hw:active{transform:translateY(3px);box-shadow:0 1px 0 var(--orange-edge)}
+.btn-line{border:1px solid var(--on-stage);background:transparent;color:var(--on-stage);border-radius:6px;font-weight:400;font-size:15px;padding:13px 18px}
+.btn-line .arr{display:inline-block;transition:transform .2s var(--ease)}
+.btn-line:hover .arr{transform:translateX(4px)}
+
+/* ================= PLATE 02: ANATOMY (paper, increase-like) ================= */
+.anat{background:var(--card);padding:28px}
+.anat-panel{background:var(--paper);border-radius:24px;padding:44px 40px;display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);gap:44px}
+.anat h3{margin:0;font-weight:500;font-size:34px;letter-spacing:-.025em;line-height:1.1}
+.anat-lead{margin:12px 0 0;color:var(--ink-2);max-width:420px}
+.feat{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:26px 20px;margin-top:40px}
+.feat div{display:flex;align-items:center;gap:14px;font-size:19px;letter-spacing:-.01em}
+.feat i{flex:0 0 46px;height:46px;border-radius:11px;border:1px solid var(--rule);background:#fff;display:flex;align-items:center;justify-content:center}
+.feat i.hot{background:#5BE5B9;border-color:#5BE5B9}
+.feat svg{width:22px;height:22px}
+.codewrap{position:relative;min-height:470px}
+.code{background:var(--navy);border-radius:22px;padding:30px 30px 150px;color:var(--code-text);font-family:var(--mono);font-size:15px;line-height:1.9;overflow:hidden}
+.code .ln{display:flex;gap:22px;white-space:pre}
+.code .n{color:var(--code-ln);width:18px;text-align:right;flex:0 0 18px}
+.code .c{clip-path:inset(0 100% 0 0)}
+.code .c.typed{clip-path:inset(0 0 0 0);transition:clip-path .38s steps(22,end)}
+.kw{color:var(--code-kw)} .st{color:var(--code-str)} .dm{color:var(--code-dim)}
+.txcard{position:absolute;left:56px;right:0;bottom:-6px;background:#fff;border-radius:18px;box-shadow:0 1px 0 rgba(0,0,0,.04),0 24px 50px -24px rgba(17,20,24,.35);
+  transform:translateY(36px);opacity:0;transition:transform .7s var(--ease),opacity .5s}
+.txcard.in{transform:none;opacity:1}
+.tx-head{padding:26px 28px 18px;border-bottom:1px solid var(--rule)}
+.tx-amt{font-size:38px;font-weight:600;letter-spacing:-.02em}
+.tx-sub{display:flex;align-items:center;gap:8px;margin-top:6px;color:var(--ink-2);font-size:15px}
+.tl{list-style:none;margin:0;padding:18px 28px 24px}
+.tl li{position:relative;display:grid;grid-template-columns:22px minmax(0,1fr) auto;align-items:center;gap:8px;padding:9px 0;opacity:0;transform:translateY(6px);transition:opacity .35s,transform .35s var(--ease)}
+.tl li.show{opacity:1;transform:none}
+.tl li:not(:last-child)::after{content:"";position:absolute;left:4px;top:30px;height:22px;width:1.5px;background:var(--rule)}
+.tl .t{font-family:var(--mono);font-size:13px;color:var(--muted)}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--settled-dot);position:relative}
+.dot.pending{background:var(--pending-dot)}
+.dot.pending::after{content:"";position:absolute;inset:-5px;border-radius:50%;border:2px solid var(--pending-dot);animation:ping 1.2s ease-out infinite}
+.dot.failed{background:var(--failed)}
+@keyframes ping{from{transform:scale(.5);opacity:1}to{transform:scale(1.5);opacity:0}}
+
+/* ================= PLATE 03: DASHBOARD (paper app) ================= */
+.app{display:grid;grid-template-columns:224px minmax(0,1fr);background:var(--card);min-height:640px}
+.side{border-right:1px solid var(--rule);padding:22px 16px;display:flex;flex-direction:column;gap:22px}
+.side-brand{display:flex;align-items:center;gap:10px;font-weight:600;font-size:17px;letter-spacing:-.01em;padding:0 8px}
+.side nav{display:flex;flex-direction:column;gap:2px}
+.side nav a{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;color:var(--ink-2);text-decoration:none;font-size:14px}
+.side nav a svg{width:18px;height:18px;flex:0 0 18px}
+.side nav a.on{background:var(--paper);color:var(--ink);font-weight:500}
+.side nav a:hover{color:var(--ink)}
+.env{margin-top:auto;align-self:flex-start;border:1px solid var(--orange);color:#A63A10;border-radius:999px;padding:4px 10px;font-family:var(--mono);font-size:11px}
+.main{padding:28px 32px;min-width:0}
+.main-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px}
+.main-head h4{margin:0;font-weight:500;font-size:28px;letter-spacing:-.02em}
+.btn-dark{border:0;background:var(--ink);color:#fff;border-radius:8px;padding:10px 14px;font-size:14px;font-weight:500}
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-top:22px}
+.kpi{border:1px solid var(--rule);border-radius:14px;padding:16px 18px;min-width:0}
+.kpi-l{font-size:13px;color:var(--muted)}
+.kpi-v{margin-top:8px;font-family:var(--mono);font-size:24px;font-weight:500;letter-spacing:-.01em}
+.kpi-f{margin-top:6px;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.kpi-drift{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.tbl-card{margin-top:18px;border:1px solid var(--rule);border-radius:14px;overflow:hidden}
+.tbl-top{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--rule)}
+.tbl-top b{font-weight:500}
+.live{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12px;color:var(--muted)}
+.tbl-scroll{overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:680px}
+th{text-align:left;font-weight:400;font-family:var(--mono);font-size:12px;color:var(--muted);padding:10px 18px;border-bottom:1px solid var(--rule)}
+td{padding:12px 18px;border-bottom:1px solid var(--rule);font-size:14px}
+tr:last-child td{border-bottom:0}
+td.amt,th.amt{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+td.id,td.tm{font-family:var(--mono);font-size:13px;color:var(--ink-2)}
+.st-cell{display:inline-flex;align-items:center;gap:8px}
+.st-cell .dot{transition:background .4s}
+tr.rowin{animation:rowin .6s var(--ease)}
+@keyframes rowin{from{opacity:0;transform:translateY(-8px);background:#F6F6F2}to{opacity:1;transform:none;background:transparent}}
+
+/* ================= PLATE 04: PAYMENT DETAIL ================= */
+.detail{background:var(--card);padding:30px 32px 36px}
+.crumb{font-family:var(--mono);font-size:13px;color:var(--muted)}
+.detail-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:12px;margin-top:8px}
+.detail-head h4{margin:0;font-size:36px;font-weight:600;letter-spacing:-.02em}
+.detail-grid{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:32px;margin-top:28px}
+.metro{position:relative;display:flex;justify-content:space-between;padding:6px 7px 0}
+.metro::before{content:"";position:absolute;left:14px;right:14px;top:13px;height:2px;background:var(--rule)}
+.metro .fill{position:absolute;left:14px;top:13px;height:2px;background:var(--ink);width:0;transition:width .9s var(--ease)}
+.stn{position:relative;display:flex;flex-direction:column;align-items:center;gap:10px;font-size:13px;color:var(--muted);width:90px;margin:0 -38px}
+.stn:first-of-type{margin-left:0;align-items:flex-start}
+.stn:last-of-type{margin-right:0;align-items:flex-end}
+.stn i{width:16px;height:16px;border-radius:50%;border:2px solid #C3C3BE;background:#fff;transition:all .3s}
+.stn.done{color:var(--ink)}
+.stn.done i{background:var(--ink);border-color:var(--ink)}
+.stn.cur i{background:#fff;border-color:var(--orange);box-shadow:0 0 0 4px rgba(255,90,31,.18)}
+.journal{position:relative;margin-top:30px;border:1px solid var(--rule);border-radius:14px;overflow:hidden}
+.j-head{display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;padding:14px 18px;border-bottom:1px solid var(--rule);font-size:14px}
+.j-head span{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.j-row{display:grid;grid-template-columns:minmax(0,1fr) 110px 110px 40px;padding:12px 18px;border-bottom:1px solid var(--rule);font-size:14px;align-items:center}
+.j-row.h{font-family:var(--mono);font-size:12px;color:var(--muted);padding:10px 18px}
+.j-row .n{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+.j-row.w{clip-path:inset(0 100% 0 0)}
+.j-row.w.on{clip-path:inset(0 0 0 0);transition:clip-path .55s var(--ease)}
+.j-row .dr{color:var(--failed)}
+.j-row.tot{font-weight:500;border-bottom:0;background:#FAFAF8}
+.j-row small{color:var(--muted);font-size:12px}
+.bracket{position:absolute;right:14px;top:96px;width:22px;height:150px;overflow:visible}
+.bracket path{stroke:var(--stamp);stroke-width:2;fill:none;stroke-dasharray:240;stroke-dashoffset:240;transition:stroke-dashoffset .6s var(--ease)}
+.bracket.on path{stroke-dashoffset:0}
+.stamp{position:absolute;font-family:var(--mono);font-weight:600;letter-spacing:.16em;text-transform:uppercase;border:2.5px solid currentColor;border-radius:6px;padding:7px 12px;
+  color:var(--stamp);background:rgba(255,255,255,.55);opacity:0;transform:rotate(-9deg) scale(1.9);transition:transform .34s cubic-bezier(.2,1.5,.45,1),opacity .18s;pointer-events:none;font-size:15px}
+.stamp.on{opacity:.92;transform:rotate(-9deg) scale(1)}
+.stamp.red{color:var(--failed)}
+.thud{animation:thud .25s ease-out}
+@keyframes thud{40%{transform:translateY(2px)}}
+.printer{background:#1C1C1C;border-radius:12px 12px 4px 4px;height:38px;position:relative;box-shadow:inset 0 -2px 0 #000}
+.printer::after{content:"";position:absolute;left:18px;right:18px;bottom:8px;height:4px;border-radius:2px;background:#000}
+.paper{position:relative;margin:0 22px;height:0;overflow:hidden;background:#FCFBF7;transition:height 2.4s steps(16,end);box-shadow:0 10px 20px -12px rgba(0,0,0,.4)}
+.paper.on{height:430px}
+.paper-in{padding:18px 18px 26px;font-family:var(--mono);font-size:12px;line-height:1.6;color:#2A2A2A}
+.paper-in .c{text-align:center}
+.paper-in hr{border:0;border-top:1px dashed #9A9A95;margin:10px 0}
+.paper-in .r{display:flex;justify-content:space-between;gap:8px}
+.paper-in .big{font-size:22px;font-weight:600;text-align:center;margin:6px 0}
+.barcode{display:flex;height:42px;gap:2px;margin-top:12px}
+.barcode span{background:#222}
+.paper::after{content:"";position:absolute;left:0;right:0;bottom:0;height:8px;background:radial-gradient(circle at 5px 8px,#F3F3F0 4px,transparent 4.5px) repeat-x;background-size:10px 8px}
+
+/* ================= PLATE 05: IDEMPOTENCY ================= */
+.idem{background:var(--paper);padding:32px;display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:28px;align-items:start}
+.reqs{display:flex;flex-direction:column;gap:14px;min-height:240px}
+.req{position:relative;background:#fff;border:1px solid var(--rule);border-radius:14px;padding:16px 18px;font-family:var(--mono);font-size:13px;line-height:1.7;
+  opacity:0;transform:translateX(-24px);transition:opacity .4s,transform .5s var(--ease),max-height .5s var(--ease)}
+.req.in{opacity:1;transform:none}
+.req .m{color:var(--ink);font-weight:500}
+.req .k{color:var(--muted)}
+.resp{display:inline-flex;align-items:center;gap:8px;margin-top:8px;padding:4px 10px;border-radius:999px;background:#E9F8F2;color:#0B6B4E;font-size:12px;opacity:0;transition:opacity .3s}
+.resp.on{opacity:1}
+.req .stamp{right:18px;top:18px}
+.req.fold{transform:perspective(700px) rotateX(75deg) scaleY(.15);opacity:0;transform-origin:top;transition:transform .6s var(--ease),opacity .6s}
+.chip{display:inline-flex;align-self:flex-start;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;border:1px dashed #B9B9B4;font-family:var(--mono);font-size:12px;color:var(--ink-2);opacity:0;transform:scale(.9);transition:all .35s var(--ease)}
+.chip.on{opacity:1;transform:none}
+.counter{background:#fff;border:1px solid var(--rule);border-radius:14px;padding:18px}
+.counter .l{font-size:13px;color:var(--muted)}
+.counter .v{font-family:var(--mono);font-size:56px;font-weight:500;line-height:1;margin-top:10px}
+.counter .f{font-size:13px;color:var(--ink-2);margin-top:10px}
+.flash{animation:flash .7s ease-out}
+@keyframes flash{0%{background:#FFF1E0}100%{background:#fff}}
+
+/* ================= PLATE 06: WEBHOOKS ================= */
+.hooks{background:#fff;padding:32px 36px 40px}
+.hooks h4,.recon h4{margin:0;font-weight:500;font-size:22px;letter-spacing:-.015em}
+.hooks p.sub,.recon p.sub{margin:6px 0 0;color:var(--ink-2);font-size:14px;max-width:640px}
+.track{position:relative;height:150px;margin:36px 10px 0}
+.track .line{position:absolute;left:0;right:0;top:64px;height:2px;background:repeating-linear-gradient(90deg,#CFCFCA 0 6px,transparent 6px 12px)}
+.pulse{position:absolute;top:57px;left:0;width:16px;height:16px;margin-left:-8px;border-radius:50%;background:var(--ink);box-shadow:0 0 0 6px rgba(17,20,24,.12);opacity:0}
+.att{position:absolute;top:56px;margin-left:-9px;width:18px;height:18px;border-radius:50%;border:2px solid #C3C3BE;background:#fff;transform:scale(.6);opacity:.5;transition:all .3s cubic-bezier(.2,1.5,.45,1)}
+.att.hit{transform:scale(1);opacity:1}
+.att.fail{border-color:var(--failed);background:var(--failed)}
+.att.ok{border-color:var(--settled);background:var(--settled)}
+.att b{position:absolute;top:28px;left:50%;transform:translateX(-50%);white-space:nowrap;font-family:var(--mono);font-weight:400;font-size:12px;color:var(--muted);opacity:0;transition:opacity .3s}
+.att.hit b{opacity:1}
+.att.fail b{color:var(--failed)} .att.ok b{color:var(--settled)}
+.gap{position:absolute;top:22px;transform:translateX(-50%);font-family:var(--mono);font-size:12px;color:var(--muted);opacity:0;transition:opacity .3s}
+.gap.on{opacity:1}
+
+/* ================= PLATE 07: RECONCILIATION ================= */
+.recon{background:#fff;padding:32px 36px 36px}
+.zip{margin-top:26px;display:grid;grid-template-columns:minmax(0,1fr) 64px minmax(0,1fr);row-gap:10px}
+.zip .colh{font-family:var(--mono);font-size:12px;color:var(--muted);padding:0 4px 4px}
+.zl,.zr{border:1px solid var(--rule);border-radius:10px;padding:10px 14px;display:flex;justify-content:space-between;gap:10px;font-size:14px;opacity:0;transition:transform .5s var(--ease),opacity .4s}
+.zl{transform:translateX(-36px)} .zr{transform:translateX(36px)}
+.zl.on,.zr.on{transform:none;opacity:1}
+.zl span:last-child,.zr span:last-child{font-family:var(--mono)}
+.zm{display:flex;align-items:center;justify-content:center;opacity:0;transform:scale(.4);transition:all .3s cubic-bezier(.2,1.5,.45,1)}
+.zm.on{opacity:1;transform:none}
+.zm svg{width:22px;height:22px}
+.bad .zl,.bad .zr{border-color:#F1B9BB;background:#FDF3F3}
+.miss-detail{grid-column:1/-1;max-height:0;overflow:hidden;transition:max-height .5s var(--ease);font-size:13px;color:#8E2328}
+.miss-detail.on{max-height:60px}
+.miss-detail div{padding:8px 14px;border-left:2px solid var(--failed);margin-top:2px}
+.recon-sum{margin-top:20px;font-family:var(--mono);font-size:13px;color:var(--ink-2)}
+
+/* ================= PLATE 08: CHAOS BENCH (stage) ================= */
+.bench{background:radial-gradient(90% 80% at 50% 0%, #1D1D1D 0%, #0B0B0B 70%);color:var(--on-stage);padding:32px}
+.bench-top{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:16px;margin-bottom:24px}
+.bench-top h4{margin:0;font-weight:300;font-size:44px;letter-spacing:-.04em;line-height:1}
+.bench-top p{margin:8px 0 0;font-family:var(--mono);font-size:12px;color:var(--on-stage-2);max-width:520px}
+.rack{display:grid;grid-template-columns:minmax(0,1.35fr) repeat(3,minmax(0,1fr));grid-auto-rows:minmax(150px,auto);gap:14px}
+.meter{grid-row:span 2;background:linear-gradient(#E3E3DF,#C6C6C1);border-radius:16px;padding:16px;color:var(--hw-ink);display:flex;flex-direction:column;gap:12px}
+.meter-disp{background:#121212;border-radius:12px;padding:10px 12px 14px;color:var(--on-stage)}
+.meter-disp svg{display:block;width:100%;height:auto}
+.meter-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.lcd{background:#161616;border-radius:8px;padding:8px 10px;color:var(--on-stage-2);font-family:var(--mono);font-size:10px;letter-spacing:.06em}
+.lcd b{display:block;margin-top:2px;font-weight:500;font-size:22px;color:var(--orange);letter-spacing:0}
+.mod{position:relative;background:linear-gradient(#E3E3DF,#C9C9C4);border-radius:16px;padding:14px 16px;color:var(--hw-ink);display:flex;flex-direction:column;gap:10px;min-width:0}
+.mod-top{display:flex;justify-content:space-between;align-items:center}
+.mod-name{font-weight:400;font-size:19px;letter-spacing:-.01em}
+.led{width:9px;height:9px;border-radius:50%;background:#15B57F;box-shadow:0 0 8px rgba(21,181,127,.7)}
+.mod.down .led{background:var(--failed);box-shadow:0 0 10px rgba(217,58,63,.85);animation:ledblink .5s steps(1,end) infinite}
+.grille{height:26px;background:radial-gradient(circle,#8F8F8A 1.4px,transparent 1.8px) 0 0/9px 9px}
+.mod-status{font-family:var(--mono);font-size:11px;color:#3F3F3B;min-height:16px}
+.mod.down .mod-status{color:#9B2125}
+.mod-ctl{display:flex;justify-content:space-between;align-items:center;margin-top:auto}
+.switch{width:46px;height:24px;border-radius:12px;border:0;background:#2A2A2A;position:relative;padding:0}
+.switch span{position:absolute;top:3px;left:25px;width:18px;height:18px;border-radius:50%;background:#F2F2EE;transition:left .2s var(--ease)}
+.switch[aria-checked="false"] span{left:3px}
+.switch[aria-checked="false"]{background:#7A7A75}
+.kill{border:0;width:44px;height:44px;border-radius:8px;background:var(--orange);color:#140601;font-family:var(--mono);font-size:11px;font-weight:600;box-shadow:0 3px 0 var(--orange-edge);transition:transform .1s,box-shadow .1s}
+.kill:active{transform:translateY(2px);box-shadow:0 1px 0 var(--orange-edge)}
+.mod.down{animation:shake .45s}
+@keyframes shake{20%{transform:translateX(-5px) rotate(-.6deg)}40%{transform:translateX(5px) rotate(.6deg)}60%{transform:translateX(-3px)}80%{transform:translateX(3px)}}
+.ctrl{grid-column:1/-1;background:#161616;border:1px solid #2A2A2A;border-radius:16px;padding:16px 18px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:14px}
+.result{font-family:var(--mono);font-size:13px;color:var(--on-stage-2)}
+.result b{color:#4FE3B5;font-weight:500}
+.result.ok{animation:flashdark 1s ease-out}
+@keyframes flashdark{0%{color:#fff}100%{color:var(--on-stage-2)}}
+
+/* ---------- responsive ---------- */
+@media (max-width: 1080px){
+  .te-nav{grid-template-columns:auto repeat(2,minmax(0,1fr))}
+  .te-micro,.te-mark{display:none}
+  .anat-panel{grid-template-columns:minmax(0,1fr)}
+  .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .detail-grid{grid-template-columns:minmax(0,1fr)}
+  .rack{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .meter{grid-column:span 2;grid-row:auto}
+  .ctrl{grid-column:1/-1}
+}
+@media (max-width: 720px){
+  .plate{padding:0 12px}
+  .te-nav{grid-template-columns:minmax(0,1fr) minmax(0,1fr);padding:22px 18px}
+  .te-item svg{display:none}
+  .te-item b{font-size:22px}
+  .hero-foot{padding:12px 18px 32px}
+  .anat{padding:12px}.anat-panel{padding:28px 18px}
+  .feat{grid-template-columns:minmax(0,1fr)}
+  .codewrap{min-height:520px}
+  .code{font-size:12px;padding:22px 16px 170px}
+  .txcard{left:12px}
+  .app{grid-template-columns:minmax(0,1fr)}
+  .side{display:none}
+  .main{padding:20px 16px}
+  .kpis{grid-template-columns:minmax(0,1fr)}
+  .detail{padding:22px 16px}
+  .j-row{grid-template-columns:minmax(0,1fr) 80px 80px 0}
+  .idem{grid-template-columns:minmax(0,1fr);padding:20px 14px}
+  .hooks,.recon{padding:24px 16px}
+  .zip{grid-template-columns:minmax(0,1fr) 36px minmax(0,1fr)}
+  .rack{grid-template-columns:minmax(0,1fr)}
+  .meter,.ctrl{grid-column:auto}
+  .bench{padding:20px 14px}
+}
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+}
+</style>
+</head>
+<body>
+
+<header class="doc-head">
+  <div>
+    <h1>zerodrift / design reference</h1>
+    <p>Two worlds. The <b>stage</b> (black, thin line art, one hardware object, orange signal) for the landing page and the chaos bench. The <b>paper</b> (calm light product UI, code and transfer cards, status dots) for the app. Every animation shows something true about the system. Sample data only.</p>
+  </div>
+  <div class="swatches" aria-label="Color tokens">
+    <div class="sw"><i style="background:#0B0B0B"></i>stage<br>#0B0B0B</div>
+    <div class="sw"><i style="background:#DCDCD8"></i>hardware<br>#DCDCD8</div>
+    <div class="sw"><i style="background:#F3F3F0"></i>paper<br>#F3F3F0</div>
+    <div class="sw"><i style="background:#111418"></i>ink<br>#111418</div>
+    <div class="sw"><i style="background:#172130"></i>code navy<br>#172130</div>
+    <div class="sw"><i style="background:#FF5A1F"></i>signal<br>#FF5A1F</div>
+    <div class="sw"><i style="background:#22C995"></i>settled<br>#22C995</div>
+    <div class="sw"><i style="background:#F2C230"></i>pending<br>#F2C230</div>
+    <div class="sw"><i style="background:#D93A3F"></i>failed / debit<br>#D93A3F</div>
+    <div class="sw"><i style="background:#2B4C8F"></i>stamp<br>#2B4C8F</div>
+  </div>
+</header>
+
+<!-- ======================= PLATE 01 ======================= -->
+<section class="plate" data-run="hero">
+  <div class="plate-bar"><span>plate 01 · landing</span><button class="replay" data-replay="hero">replay</button></div>
+  <div class="screen landing">
+    <nav class="te-nav" aria-label="Main">
+      <a class="wordmark" href="#">zero<br>drift</a>
+      <a class="te-item" href="#">
+        <svg viewBox="0 0 46 46" fill="none" stroke="#EDEDEA" stroke-width="1.2" aria-hidden="true"><rect x="6" y="5" width="34" height="36"/><path d="M6 13h34M23 5v36M10 19h9M10 24h9M27 29h9M27 34h9"/></svg>
+        <div><b>ledger</b><span>accounts<br>journal<br>holds</span></div></a>
+      <a class="te-item" href="#">
+        <svg viewBox="0 0 46 46" fill="none" stroke="#EDEDEA" stroke-width="1.2" aria-hidden="true"><circle cx="23" cy="23" r="16"/><path d="M3 23h40M35 16l8 7-8 7"/></svg>
+        <div><b>payments</b><span>api<br>webhooks<br>refunds</span></div></a>
+      <a class="te-item" href="#">
+        <svg viewBox="0 0 46 46" fill="none" stroke="#EDEDEA" stroke-width="1.2" aria-hidden="true"><rect x="5" y="15" width="36" height="16" rx="8"/><circle cx="33" cy="23" r="5"/><path d="M12 9l3 4M23 6v5M34 9l-3 4"/></svg>
+        <div><b>chaos</b><span>bench<br>results<br>invariants</span></div></a>
+      <a class="te-item" href="#">
+        <svg viewBox="0 0 46 46" fill="none" stroke="#EDEDEA" stroke-width="1.2" aria-hidden="true"><path d="M8 6h22l8 8v26H8z"/><path d="M30 6v8h8M14 22h18M14 28h18M14 34h11"/></svg>
+        <div><b>docs</b><span>guides<br>reference<br>github</span></div></a>
+      <p class="te-micro">zd-1 is a double-entry payments ledger. it moves money between accounts, and proves under failure that none of it drifts. built with care, tested with violence.</p>
+      <svg class="te-mark" viewBox="0 0 92 92" fill="none" stroke="#EDEDEA" stroke-width="1.4" aria-hidden="true"><path d="M10 64a36 36 0 0 1 72 0"/><path d="M46 64V26"/><circle cx="46" cy="64" r="5"/><path d="M14 64h8M70 64h8M46 20v-6"/><path d="M10 78h72"/></svg>
+    </nav>
+
+    <div class="hero">
+      <h2>money that never drifts.</h2>
+      <p>a payments ledger you can kill, unplug and flood with duplicates. the books still balance to the paisa.</p>
+    </div>
+
+    <div class="device" aria-hidden="true">
+      <svg id="heroSvg" viewBox="0 0 760 420">
+        <defs>
+          <linearGradient id="bodyG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#EDEDE9"/><stop offset=".14" stop-color="#DEDED9"/><stop offset="1" stop-color="#BDBDB8"/></linearGradient>
+          <radialGradient id="shG"><stop offset="0" stop-color="#000" stop-opacity=".75"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient>
+          <pattern id="dotsP" width="10" height="10" patternUnits="userSpaceOnUse"><circle cx="5" cy="5" r="1.6" fill="#8E8E89"/></pattern>
+        </defs>
+        <ellipse cx="380" cy="372" rx="350" ry="18" fill="url(#shG)"/>
+        <rect x="40" y="150" width="680" height="210" rx="24" fill="url(#bodyG)"/>
+        <rect x="40.5" y="150.5" width="679" height="209" rx="24" fill="none" stroke="#F8F8F5" stroke-opacity=".7"/>
+        <path d="M64 330h632" stroke="#A9A9A4"/>
+        <rect x="78" y="178" width="254" height="150" rx="14" fill="#121212" stroke="#8E8E89"/>
+        <text x="96" y="200" font-family="Geist Mono, monospace" font-size="11" fill="#8A8A86">drift · ₹</text>
+        <g class="ticks"></g>
+        <line class="needle" x1="205" y1="318" x2="205" y2="232" stroke="#FF5A1F" stroke-width="3" stroke-linecap="round"/>
+        <circle cx="205" cy="318" r="8" fill="#2A2A2A" stroke="#5A5A56"/>
+        <rect x="360" y="186" width="180" height="60" rx="8" fill="#161616"/>
+        <text x="372" y="204" font-family="Geist Mono, monospace" font-size="9" fill="#8A8A86">₹ DRIFT</text>
+        <text class="lcd-t" x="528" y="234" text-anchor="end" font-family="Geist Mono, monospace" font-size="32" fill="#FF5A1F">0.00</text>
+        <rect x="360" y="262" width="180" height="56" rx="6" fill="url(#dotsP)"/>
+        <rect x="360" y="144" width="200" height="8" rx="4" fill="#2A2A2A"/>
+        <circle cx="626" cy="222" r="40" fill="none" stroke="#A9A9A4"/>
+        <circle cx="626" cy="222" r="34" fill="#E64E16"/>
+        <circle cx="626" cy="222" r="27" fill="#FF6A2E"/>
+        <path d="M626 222V198" stroke="#7A2A0A" stroke-width="3" stroke-linecap="round"/>
+        <circle cx="586" cy="304" r="15" fill="#2A2A2A"/><path d="M586 304l-8-8" stroke="#E8E8E4" stroke-width="2" stroke-linecap="round"/>
+        <circle cx="640" cy="304" r="15" fill="#2A2A2A"/><path d="M640 304l9-6" stroke="#E8E8E4" stroke-width="2" stroke-linecap="round"/>
+        <circle class="led-blink" cx="694" cy="174" r="5" fill="#22C995"/>
+        <text x="78" y="350" font-family="Geist Mono, monospace" font-size="10" fill="#66665F">ZD-1   DOUBLE-ENTRY LEDGER   ₹ INR</text>
+      </svg>
+      <div class="receipt-out" id="heroReceipt">
+        <div>ZERODRIFT</div><div>pay_7731</div><div>riya → café</div><div>₹250.00</div><div>dr 250.00</div><div>cr 250.00</div><div>drift 0.00</div><div>SETTLED</div>
+      </div>
+    </div>
+
+    <div class="hero-foot">
+      <ul class="spec">
+        <li>ledger <span>double-entry, append-only</span></li>
+        <li>api <span>idempotent, every money call</span></li>
+        <li>events <span>outbox → kafka, effectively once</span></li>
+        <li>proof <span>chaos-tested, invariants checked</span></li>
+      </ul>
+      <div class="ctas">
+        <button class="btn-line">see the chaos results <span class="arr">→</span></button>
+        <button class="btn-hw">open the ledger</button>
+      </div>
+    </div>
+  </div>
+  <p class="note">Motion: the needle swings in from the left and settles on 0 with a damped spring (it trembles during chaos but always returns). The receipt prints out of the slot in steps, like a thermal printer. The status LED blinks slowly. Nav uses big light lowercase words with thin line-drawn icons.</p>
+</section>
+
+<!-- ======================= PLATE 02 ======================= -->
+<section class="plate" data-run="anat">
+  <div class="plate-bar"><span>plate 02 · anatomy of a payment</span><button class="replay" data-replay="anat">replay</button></div>
+  <div class="screen anat">
+    <div class="anat-panel">
+      <div>
+        <h3>One payment. Every step on record.</h3>
+        <p class="anat-lead">Call the API once, or ten times by accident. Zerodrift holds the money, talks to the gateway, posts balanced entries and tells the merchant, exactly as many times as it should.</p>
+        <div class="feat">
+          <div><i class="hot"><svg viewBox="0 0 24 24" fill="none" stroke="#111418" stroke-width="1.6" stroke-linecap="round"><path d="M4 12h12M12 6l6 6-6 6"/></svg></i>idempotent API</div>
+          <div><i><svg viewBox="0 0 24 24" fill="none" stroke="#111418" stroke-width="1.6"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M4 10h16M12 10v9"/></svg></i>double-entry ledger</div>
+          <div><i><svg viewBox="0 0 24 24" fill="none" stroke="#111418" stroke-width="1.6"><path d="M7 11V8a5 5 0 0 1 10 0v3"/><rect x="5" y="11" width="14" height="9" rx="2"/></svg></i>holds &amp; captures</div>
+          <div><i><svg viewBox="0 0 24 24" fill="none" stroke="#111418" stroke-width="1.6" stroke-linecap="round"><path d="M5 12a7 7 0 0 1 12-5l2 2M19 12a7 7 0 0 1-12 5l-2-2M19 4v5h-5M5 20v-5h5"/></svg></i>signed webhooks</div>
+          <div><i><svg viewBox="0 0 24 24" fill="none" stroke="#111418" stroke-width="1.6" stroke-linecap="round"><path d="M4 7h7M4 12h7M4 17h7M14 7h6M14 12h6M14 17h6"/></svg></i>reconciliation</div>
+          <div><i><svg viewBox="0 0 24 24" fill="none" stroke="#111418" stroke-width="1.6" stroke-linecap="round"><path d="M13 3L5 14h6l-1 7 8-11h-6z"/></svg></i>chaos-tested</div>
+        </div>
+      </div>
+      <div class="codewrap">
+        <div class="code" aria-label="Example API call">
+          <div class="ln"><span class="n">1</span><span class="c"><span class="kw">await</span> zerodrift.payments.<span class="kw">create</span>({</span></div>
+          <div class="ln"><span class="n">2</span><span class="c">    amount: <span class="st">25000n</span>,  <span class="dm">// ₹250.00 in paise</span></span></div>
+          <div class="ln"><span class="n">3</span><span class="c">    currency: <span class="st">"INR"</span>,</span></div>
+          <div class="ln"><span class="n">4</span><span class="c">    from: <span class="st">"acct_riya_wallet"</span>,</span></div>
+          <div class="ln"><span class="n">5</span><span class="c">    to: <span class="st">"acct_cafe_aman"</span>,</span></div>
+          <div class="ln"><span class="n">6</span><span class="c">    idempotencyKey: <span class="st">"ord_7731"</span>,</span></div>
+          <div class="ln"><span class="n">7</span><span class="c">});</span></div>
+          <div class="ln"><span class="n">8</span><span class="c"> </span></div>
+          <div class="ln"><span class="n">9</span><span class="c"> </span></div>
+        </div>
+        <div class="txcard" id="txcard">
+          <div class="tx-head">
+            <div class="tx-amt"><span class="odo" id="txAmt">₹0.00</span></div>
+            <div class="tx-sub"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#454B57" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12h8M13 8l4 4-4 4"/></svg>wallet payment · café aman</div>
+          </div>
+          <ul class="tl" id="txTl">
+            <li><span class="dot"></span><span>Payment created</span><span class="t">18:42:07.112</span></li>
+            <li><span class="dot"></span><span>₹250.00 held on Riya's wallet</span><span class="t">.148</span></li>
+            <li><span class="dot"></span><span>Approved by gateway</span><span class="t">.806</span></li>
+            <li><span class="dot"></span><span>Posted to ledger · debits = credits</span><span class="t">.841</span></li>
+            <li><span class="dot pending" id="lastDot"></span><span>Webhook delivered to Café Aman</span><span class="t" id="lastT">sending…</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note">Motion: code "types" in line by line (stepped reveal), the transfer card rises over the code, the amount rolls up like an odometer (use NumberFlow), then timeline steps appear one by one. The last step pulses yellow while pending, then turns green.</p>
+</section>
+
+<!-- ======================= PLATE 03 ======================= -->
+<section class="plate" data-run="dash">
+  <div class="plate-bar"><span>plate 03 · app overview</span><button class="replay" data-replay="dash">replay</button></div>
+  <div class="screen app">
+    <aside class="side">
+      <div class="side-brand"><svg width="22" height="22" viewBox="0 0 92 92" fill="none" stroke="#111418" stroke-width="6" aria-hidden="true"><path d="M10 64a36 36 0 0 1 72 0"/><path d="M46 64V26"/></svg>zerodrift</div>
+      <nav aria-label="App">
+        <a class="on" href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M4 18a8 8 0 0 1 16 0"/><path d="M12 18V10"/></svg>Overview</a>
+        <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M8 12h8M13 9l3 3-3 3"/></svg>Payments</a>
+        <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 9h16M12 9v11"/></svg>Ledger</a>
+        <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M5 12a7 7 0 0 1 12-5l2 2M19 12a7 7 0 0 1-12 5l-2-2"/></svg>Webhooks</a>
+        <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M4 7h6M4 12h6M4 17h6M14 7h6M14 12h6M14 17h6"/></svg>Reconciliation</a>
+        <a href="#"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="3" y="9" width="18" height="8" rx="4"/><circle cx="16" cy="13" r="2"/></svg>Chaos bench</a>
+      </nav>
+      <span class="env">test mode</span>
+    </aside>
+    <div class="main">
+      <div class="main-head"><h4>Overview</h4><button class="btn-dark">New payment</button></div>
+      <div class="kpis">
+        <div class="kpi"><div class="kpi-l">Money in system</div><div class="kpi-v"><span class="odo" data-to="₹12,40,000.00">₹0.00</span></div><div class="kpi-f">unchanged since genesis</div></div>
+        <div class="kpi"><div class="kpi-l">Drift</div><div class="kpi-drift"><div class="kpi-v"><span class="odo" data-to="₹0.00">₹0.00</span></div>
+          <svg width="64" height="36" viewBox="0 0 64 36" aria-hidden="true"><path d="M6 32a26 26 0 0 1 52 0" fill="none" stroke="#E2E2DE" stroke-width="4" stroke-linecap="round"/><line class="mini-needle" x1="32" y1="32" x2="32" y2="12" stroke="#FF5A1F" stroke-width="2.5" stroke-linecap="round"/><circle cx="32" cy="32" r="3" fill="#111418"/></svg></div>
+          <div class="kpi-f"><span class="dot"></span>steady</div></div>
+        <div class="kpi"><div class="kpi-l">Payments today</div><div class="kpi-v"><span class="odo" data-to="1,204">0</span></div><div class="kpi-f">sample data</div></div>
+        <div class="kpi"><div class="kpi-l">Success rate</div><div class="kpi-v"><span class="odo" data-to="98.6%">0.0%</span></div><div class="kpi-f">last 24 h</div></div>
+      </div>
+      <div class="tbl-card">
+        <div class="tbl-top"><b>Recent payments</b><span class="live"><span class="dot"></span>live</span></div>
+        <div class="tbl-scroll">
+          <table>
+            <thead><tr><th>id</th><th>merchant</th><th>method</th><th class="amt">amount</th><th>status</th><th>time</th></tr></thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note">Motion: KPI numbers roll in. New payments slide in at the top of the table; "processing" rows turn "settled" on their own a few seconds later (recovery made visible). The tiny drift needle on the KPI stays on zero. No left-border accents, no gradient cards.</p>
+</section>
+
+<!-- ======================= PLATE 04 ======================= -->
+<section class="plate" data-run="detail">
+  <div class="plate-bar"><span>plate 04 · payment detail</span><button class="replay" data-replay="detail">replay</button></div>
+  <div class="screen detail">
+    <div class="crumb">payments / pay_7731</div>
+    <div class="detail-head"><h4>₹250.00 to Café Aman</h4><span class="crumb">idempotency key ord_7731</span></div>
+    <div class="detail-grid">
+      <div>
+        <div class="metro" id="metro" aria-label="Payment state">
+          <span class="fill"></span>
+          <div class="stn"><i></i>created</div>
+          <div class="stn"><i></i>processing</div>
+          <div class="stn"><i></i>succeeded</div>
+          <div class="stn"><i></i>refunded</div>
+        </div>
+        <div class="journal" id="journal">
+          <div class="j-head"><b>Journal txn_88f2</b><span>payment · posted 18:42:07.841</span></div>
+          <div class="j-row h"><span>account</span><span class="n">debit</span><span class="n">credit</span><span></span></div>
+          <div class="j-row w"><span>Riya <small>· customer wallet</small></span><span class="n dr">250.00</span><span class="n"></span><span></span></div>
+          <div class="j-row w"><span>Café Aman <small>· merchant</small></span><span class="n"></span><span class="n">245.00</span><span></span></div>
+          <div class="j-row w"><span>Zerodrift fees <small>· system</small></span><span class="n"></span><span class="n">5.00</span><span></span></div>
+          <div class="j-row w tot"><span>total</span><span class="n">250.00</span><span class="n">250.00</span><span></span></div>
+          <svg class="bracket" id="bracket" viewBox="0 0 22 150" aria-hidden="true"><path d="M2 2h10v146H2M12 75h8"/></svg>
+          <span class="stamp" id="balStamp" style="left:110px;bottom:6px">balanced</span>
+        </div>
+      </div>
+      <div>
+        <div class="printer" aria-hidden="true"></div>
+        <div class="paper" id="paper">
+          <div class="paper-in">
+            <div class="c"><b>ZERODRIFT</b><br>payment receipt</div><hr>
+            <div class="r"><span>pay</span><span>pay_7731</span></div>
+            <div class="r"><span>from</span><span>riya · wallet</span></div>
+            <div class="r"><span>to</span><span>café aman</span></div>
+            <div class="r"><span>time</span><span>18:42:07</span></div><hr>
+            <div class="big">₹250.00</div><hr>
+            <div class="r"><span>ledger txn</span><span>txn_88f2</span></div>
+            <div class="r"><span>debits</span><span>250.00</span></div>
+            <div class="r"><span>credits</span><span>250.00</span></div>
+            <div class="r"><span>drift</span><span>0.00</span></div><hr>
+            <div class="c">SETTLED</div>
+            <div class="barcode" id="barcode" aria-hidden="true"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <p class="note">Motion: the dot travels the state "metro line" station by station. Journal rows write in left to right like ink, a bracket draws around them, and a BALANCED stamp thuds down (overshoot + tiny card bump). The receipt prints downward in steps with a torn edge.</p>
+</section>
+
+<!-- ======================= PLATE 05 ======================= -->
+<section class="plate" data-run="idem">
+  <div class="plate-bar"><span>plate 05 · the double tap</span><button class="replay" data-replay="idem">replay</button></div>
+  <div class="screen idem">
+    <div class="reqs" id="reqs">
+      <div class="req" id="req1"><div class="m">POST /v1/payments</div><div class="k">Idempotency-Key: ord_7731</div><div>amount 25000 · from riya · to café</div><div class="resp" id="resp1"><span class="dot"></span>201 created · pay_7731</div></div>
+      <div class="req" id="req2"><div class="m">POST /v1/payments <span class="k">(network retry)</span></div><div class="k">Idempotency-Key: ord_7731</div><div>amount 25000 · from riya · to café</div><span class="stamp red" id="dupStamp">already paid</span></div>
+      <span class="chip" id="dupChip">duplicate absorbed · same response returned</span>
+    </div>
+    <div class="counter" id="counter"><div class="l">Charges on Riya's wallet</div><div class="v" id="chargeN">0</div><div class="f">Two requests, one charge. The second one gets the first one's answer.</div></div>
+  </div>
+  <p class="note">Motion: request 2 slides in looking identical, gets stamped ALREADY PAID, then folds away into a small chip. The charge counter flashes but stays at 1. This is idempotency explained in three seconds.</p>
+</section>
+
+<!-- ======================= PLATE 06 ======================= -->
+<section class="plate" data-run="hooks">
+  <div class="plate-bar"><span>plate 06 · webhook retries</span><button class="replay" data-replay="hooks">replay</button></div>
+  <div class="screen hooks">
+    <h4>Telling Café Aman, until they hear it</h4>
+    <p class="sub">Their server was down for a while. Each retry waits twice as long as the last, plus a little random jitter, so a struggling server isn't flooded.</p>
+    <div class="track" id="track"><div class="line"></div><span class="pulse" id="pulse"></span></div>
+  </div>
+  <p class="note">Motion: a pulse travels the line and hits each attempt. The growing gaps between attempts are drawn to scale, so exponential backoff is visible, not just described.</p>
+</section>
+
+<!-- ======================= PLATE 07 ======================= -->
+<section class="plate" data-run="recon">
+  <div class="plate-bar"><span>plate 07 · reconciliation</span><button class="replay" data-replay="recon">replay</button></div>
+  <div class="screen recon">
+    <h4>Our books, their report, side by side</h4>
+    <p class="sub">Every night Zerodrift lines up its ledger against the gateway's settlement file. Anything that doesn't match gets flagged, never silently fixed.</p>
+    <div class="zip" id="zip">
+      <div class="colh">our ledger</div><div></div><div class="colh">gateway report</div>
+    </div>
+    <div class="recon-sum" id="reconSum">&nbsp;</div>
+  </div>
+  <p class="note">Motion: rows slide in from both sides and meet in the middle like a zip. Matches get a check; the mismatch row turns red and opens a short explanation.</p>
+</section>
+
+<!-- ======================= PLATE 08 ======================= -->
+<section class="plate" data-run="chaos">
+  <div class="plate-bar"><span>plate 08 · chaos bench</span><small>simulated here · real numbers come from the chaos test</small></div>
+  <div class="screen bench">
+    <div class="bench-top">
+      <div><h4>chaos bench</h4><p>flip a switch to kill a service. or run the full test: 10,000 transfers while things break at random. the needle should never leave zero.</p></div>
+    </div>
+    <div class="rack">
+      <div class="meter">
+        <div class="meter-disp">
+          <svg id="chaosSvg" viewBox="0 0 260 150" aria-hidden="true">
+            <g class="ticks"></g>
+            <line class="needle" x1="130" y1="138" x2="130" y2="52" stroke="#FF5A1F" stroke-width="3" stroke-linecap="round"/>
+            <circle cx="130" cy="138" r="8" fill="#2A2A2A" stroke="#5A5A56"/>
+          </svg>
+        </div>
+        <div class="meter-row">
+          <div class="lcd">TRANSFERS<b id="cCount">0</b></div>
+          <div class="lcd">FAULTS<b id="cFaults">0</b></div>
+        </div>
+        <div class="lcd">₹ DRIFT<b>0.00</b></div>
+      </div>
+      <div class="mod" data-mod="payments"><div class="mod-top"><span class="mod-name">payments</span><span class="led"></span></div><div class="grille"></div><div class="mod-status" aria-live="polite">running · 3 replicas</div><div class="mod-ctl"><button class="switch" role="switch" aria-checked="true" aria-label="payments power"><span></span></button><button class="kill" aria-label="kill payments">kill</button></div></div>
+      <div class="mod" data-mod="ledger"><div class="mod-top"><span class="mod-name">ledger</span><span class="led"></span></div><div class="grille"></div><div class="mod-status" aria-live="polite">running · 3 replicas</div><div class="mod-ctl"><button class="switch" role="switch" aria-checked="true" aria-label="ledger power"><span></span></button><button class="kill" aria-label="kill ledger">kill</button></div></div>
+      <div class="mod" data-mod="webhooks"><div class="mod-top"><span class="mod-name">webhooks</span><span class="led"></span></div><div class="grille"></div><div class="mod-status" aria-live="polite">running · 2 replicas</div><div class="mod-ctl"><button class="switch" role="switch" aria-checked="true" aria-label="webhooks power"><span></span></button><button class="kill" aria-label="kill webhooks">kill</button></div></div>
+      <div class="mod" data-mod="gateway"><div class="mod-top"><span class="mod-name">gateway</span><span class="led"></span></div><div class="grille"></div><div class="mod-status" aria-live="polite">running · 1 replica</div><div class="mod-ctl"><button class="switch" role="switch" aria-checked="true" aria-label="gateway power"><span></span></button><button class="kill" aria-label="kill gateway">kill</button></div></div>
+      <div class="mod" data-mod="kafka"><div class="mod-top"><span class="mod-name">kafka</span><span class="led"></span></div><div class="grille"></div><div class="mod-status" aria-live="polite">running · 3 brokers</div><div class="mod-ctl"><button class="switch" role="switch" aria-checked="true" aria-label="kafka power"><span></span></button><button class="kill" aria-label="kill kafka">kill</button></div></div>
+      <div class="mod" data-mod="network"><div class="mod-top"><span class="mod-name">network</span><span class="led"></span></div><div class="grille"></div><div class="mod-status" aria-live="polite">clean · 0 ms added</div><div class="mod-ctl"><button class="switch" role="switch" aria-checked="true" aria-label="network power"><span></span></button><button class="kill" aria-label="break network">kill</button></div></div>
+      <div class="ctrl">
+        <span class="result" id="cResult">ready. press run to start 10,000 transfers.</span>
+        <button class="btn-hw" id="runChaos">run chaos test</button>
+      </div>
+    </div>
+  </div>
+  <p class="note">Motion: killing a module shakes it, flips its switch, turns its LED red and blinking, and kicks the needle. The needle trembles but its spring always pulls it back to zero. At the end the result line lights up with the invariant summary. This is the demo-video moment.</p>
+</section>
+
+<script>
+const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const sleep = ms => new Promise(r => setTimeout(r, RM ? 0 : ms));
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+
+/* cancellable sequences: replaying a plate cancels its previous run */
+const tokens = {};
+function seq(name){
+  const t = (tokens[name] = (tokens[name] || 0) + 1);
+  return async ms => { await sleep(ms); if (tokens[name] !== t) throw 'cancel'; };
+}
+
+/* ---------- odometer ---------- */
+function odo(el, text){
+  el.setAttribute('aria-label', text);
+  el.innerHTML = '';
+  const strips = [];
+  for (const ch of text){
+    if (/\d/.test(ch)){
+      const col = document.createElement('span'); col.className = 'odo-col'; col.setAttribute('aria-hidden','true');
+      const strip = document.createElement('span'); strip.className = 'odo-strip';
+      for (let i = 0; i < 10; i++){ const s = document.createElement('span'); s.textContent = i; strip.appendChild(s); }
+      col.appendChild(strip); el.appendChild(col); strips.push([strip, +ch]);
+    } else {
+      const s = document.createElement('span'); s.className = 'odo-ch'; s.textContent = ch; s.setAttribute('aria-hidden','true'); el.appendChild(s);
+    }
+  }
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    strips.forEach(([strip, d], i) => { strip.style.transitionDelay = (i * 45) + 'ms'; strip.style.transform = `translateY(${-d * 1.1}em)`; });
+  }));
+}
+
+/* ---------- gauge with spring needle ---------- */
+class Gauge{
+  constructor(svg, cx, cy, r, opts = {}){
+    this.svg = svg; this.cx = cx; this.cy = cy; this.needle = $('.needle', svg);
+    this.ang = -58; this.vel = 0; this.target = 0;
+    const g = $('.ticks', svg), ns = 'http://www.w3.org/2000/svg';
+    for (let i = -10; i <= 10; i++){
+      const a = i * 6, major = i % 5 === 0;
+      const l = document.createElementNS(ns, 'line');
+      l.setAttribute('x1', cx); l.setAttribute('x2', cx);
+      l.setAttribute('y1', cy - r); l.setAttribute('y2', cy - r + (major ? 14 : 7));
+      l.setAttribute('stroke', major ? '#EDEDEA' : '#6F6F6A'); l.setAttribute('stroke-width', major ? 2 : 1.2);
+      l.setAttribute('transform', `rotate(${a} ${cx} ${cy})`); g.appendChild(l);
+      if (major){
+        const rad = a * Math.PI / 180, lr = r - (opts.labelInset || 30);
+        const t = document.createElementNS(ns, 'text');
+        t.setAttribute('x', cx + lr * Math.sin(rad)); t.setAttribute('y', cy - lr * Math.cos(rad) + 4);
+        t.setAttribute('text-anchor', 'middle'); t.setAttribute('font-family', 'Geist Mono, monospace');
+        t.setAttribute('font-size', opts.font || 11); t.setAttribute('fill', '#A3A39E');
+        t.textContent = i === 0 ? '0' : (i < 0 ? '−' : '+') + Math.abs(i); g.appendChild(t);
+      }
+    }
+    this.draw(); this.loop();
+  }
+  reset(){ this.ang = -58; this.vel = 0; }
+  kick(m){ this.vel += (Math.random() < .5 ? -1 : 1) * m; }
+  draw(){ this.needle.setAttribute('transform', `rotate(${this.ang.toFixed(2)} ${this.cx} ${this.cy})`); }
+  loop(){
+    const step = () => {
+      if (RM){ this.ang = this.target; this.vel = 0; }
+      else { this.vel += (this.target - this.ang) * 0.045; this.vel *= 0.885; this.ang += this.vel; }
+      this.draw(); requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+}
+const heroGauge = new Gauge($('#heroSvg'), 205, 318, 100);
+const chaosGauge = new Gauge($('#chaosSvg'), 130, 138, 100, {labelInset: 32, font: 12});
+
+/* ---------- plate runs ---------- */
+const runs = {};
+
+runs.hero = async () => {
+  const w = seq('hero');
+  const rc = $('#heroReceipt'); rc.style.transition = 'none'; rc.classList.remove('on'); void rc.offsetHeight; rc.style.transition = '';
+  heroGauge.reset();
+  try { await w(900); rc.classList.add('on'); } catch(e){}
+};
+
+runs.anat = async () => {
+  const w = seq('anat');
+  const lines = $$('.code .c'), card = $('#txcard'), items = $$('#txTl li'), last = $('#lastDot'), lastT = $('#lastT');
+  lines.forEach(l => { l.style.transition = 'none'; l.classList.remove('typed'); });
+  card.classList.remove('in'); items.forEach(i => i.classList.remove('show'));
+  last.className = 'dot pending'; lastT.textContent = 'sending…'; odo($('#txAmt'), '₹000.00');
+  void card.offsetHeight; lines.forEach(l => l.style.transition = '');
+  try{
+    for (const l of lines){ l.classList.add('typed'); await w(260); }
+    await w(200); card.classList.add('in');
+    await w(450); odo($('#txAmt'), '₹250.00');
+    for (const i of items){ await w(520); i.classList.add('show'); }
+    await w(1400); last.className = 'dot'; lastT.textContent = '18:42:08.020';
+  } catch(e){}
+};
+
+const merchants = ['Café Aman','Chai Point 21','Kirana Mart','Bookworm','Metro Pharmacy','Pixel Prints','Dosa Corner'];
+const methods = ['upi','wallet','card'];
+const inr = n => '₹' + n.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+const hhmmss = () => new Date().toTimeString().slice(0, 8);
+function makeRow(animate){
+  const r = Math.random(), status = r < .78 ? 'settled' : r < .93 ? 'processing' : 'failed';
+  const tr = document.createElement('tr');
+  const id = 'pay_' + Math.random().toString(16).slice(2, 6);
+  const amt = Math.round((49 + Math.random() * 4950)) ;
+  tr.innerHTML = `<td class="id">${id}</td><td>${merchants[Math.floor(Math.random()*merchants.length)]}</td><td class="tm">${methods[Math.floor(Math.random()*3)]}</td><td class="amt">${inr(amt)}</td><td><span class="st-cell"><span class="dot ${status==='processing'?'pending':status==='failed'?'failed':''}"></span><span class="lbl">${status}</span></span></td><td class="tm">${hhmmss()}</td>`;
+  if (animate) tr.className = 'rowin';
+  if (status === 'processing') setTimeout(() => { const d = $('.dot', tr); d.className = 'dot'; $('.lbl', tr).textContent = 'settled'; }, RM ? 0 : 3200);
+  return tr;
+}
+let dashTimer = null;
+runs.dash = async () => {
+  seq('dash');
+  $$('.kpi .odo').forEach(el => { el.textContent = el.dataset.to.replace(/\d/g,'0'); odo(el, el.dataset.to); });
+  const body = $('#rows'); body.innerHTML = '';
+  for (let i = 0; i < 6; i++) body.appendChild(makeRow(false));
+  clearInterval(dashTimer);
+  if (!RM) dashTimer = setInterval(() => {
+    if (!dashVisible) return;
+    body.insertBefore(makeRow(true), body.firstChild);
+    if (body.children.length > 7) body.lastChild.remove();
+  }, 2600);
+};
+
+runs.detail = async () => {
+  const w = seq('detail');
+  const stns = $$('#metro .stn'), fill = $('#metro .fill'), rows = $$('#journal .j-row.w'), br = $('#bracket'), st = $('#balStamp'), paper = $('#paper'), j = $('#journal');
+  stns.forEach(s => s.classList.remove('done','cur')); fill.style.width = '0';
+  [...rows, br, st].forEach(el => { el.style.transition = 'none'; el.classList.remove('on'); });
+  paper.style.transition = 'none'; paper.classList.remove('on');
+  void paper.offsetHeight; [...rows, br, st, paper].forEach(el => el.style.transition = '');
+  try{
+    paper.classList.add('on');
+    for (let i = 0; i < 3; i++){
+      stns.forEach((s, k) => { s.classList.toggle('done', k < i); s.classList.toggle('cur', k === i); });
+      fill.style.width = `calc(${(i / 3) * 100}% - ${i ? 28 * i / 3 : 0}px)`;
+      await w(800);
+    }
+    stns[2].classList.remove('cur'); stns[2].classList.add('done');
+    for (const r of rows){ r.classList.add('on'); await w(380); }
+    await w(200); br.classList.add('on');
+    await w(500); st.classList.add('on'); j.classList.remove('thud'); void j.offsetWidth; j.classList.add('thud');
+  } catch(e){}
+};
+(function barcode(){ const b = $('#barcode'); for (let i = 0; i < 46; i++){ const s = document.createElement('span'); s.style.width = (1 + Math.floor(Math.random()*3)) + 'px'; b.appendChild(s); } })();
+
+runs.idem = async () => {
+  const w = seq('idem');
+  const r1 = $('#req1'), r2 = $('#req2'), p1 = $('#resp1'), ds = $('#dupStamp'), chip = $('#dupChip'), n = $('#chargeN'), c = $('#counter');
+  [r1, r2, p1, ds, chip].forEach(el => { el.style.transition = 'none'; el.classList.remove('in','on','fold'); });
+  r2.style.display = ''; n.textContent = '0';
+  void r1.offsetHeight; [r1, r2, p1, ds, chip].forEach(el => el.style.transition = '');
+  try{
+    await w(300); r1.classList.add('in');
+    await w(700); p1.classList.add('on'); n.textContent = '1'; c.classList.remove('flash'); void c.offsetWidth; c.classList.add('flash');
+    await w(1000); r2.classList.add('in');
+    await w(900); ds.classList.add('on'); r2.classList.remove('thud'); void r2.offsetWidth; r2.classList.add('thud');
+    c.classList.remove('flash'); void c.offsetWidth; c.classList.add('flash');
+    await w(1300); r2.classList.add('fold');
+    await w(600); r2.style.display = 'none'; chip.classList.add('on');
+  } catch(e){}
+};
+
+const attempts = [{t:0,code:'503'},{t:2,code:'503'},{t:6,code:'timeout'},{t:14,code:'503'},{t:30,code:'200 ok'}];
+(function buildTrack(){
+  const tr = $('#track');
+  attempts.forEach((a, i) => {
+    const pct = 2 + (a.t / 30) * 96;
+    const el = document.createElement('span'); el.className = 'att'; el.style.left = pct + '%';
+    el.innerHTML = `<b>#${i+1} · ${a.code}</b>`; tr.appendChild(el); a.el = el; a.pct = pct;
+    if (i){ const g = document.createElement('span'); g.className = 'gap'; const prev = attempts[i-1]; g.style.left = ((prev.pct + pct) / 2) + '%'; g.textContent = `wait ${a.t - prev.t}s`; tr.appendChild(g); a.gap = g; }
+  });
+})();
+runs.hooks = async () => {
+  const w = seq('hooks'), p = $('#pulse');
+  attempts.forEach(a => { a.el.className = 'att'; if (a.gap) a.gap.classList.remove('on'); });
+  p.style.transition = 'none'; p.style.left = attempts[0].pct + '%'; p.style.opacity = '0'; void p.offsetWidth;
+  try{
+    await w(300); p.style.opacity = '1';
+    for (let i = 0; i < attempts.length; i++){
+      const a = attempts[i];
+      if (i){ a.gap.classList.add('on'); const dur = (a.t - attempts[i-1].t) * 110 + 250; p.style.transition = `left ${RM?0:dur}ms cubic-bezier(.45,0,.55,1)`; p.style.left = a.pct + '%'; await w(dur); }
+      a.el.classList.add('hit', i === attempts.length - 1 ? 'ok' : 'fail');
+      await w(350);
+    }
+    p.style.opacity = '0';
+  } catch(e){}
+};
+
+const reconRows = [
+  ['pay_7731','₹250.00','₹250.00'],['pay_7742','₹1,199.00','₹1,199.00'],['pay_7756','₹89.00','₹89.00'],
+  ['pay_7790','₹499.00','₹449.00'],['pay_7802','₹2,350.00','₹2,350.00']];
+const okIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="#0F9F73" stroke-width="2.4" stroke-linecap="round" aria-label="matched" role="img"><path d="M5 12l5 5 9-10"/></svg>';
+const badIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="#D93A3F" stroke-width="2.4" stroke-linecap="round" aria-label="mismatch" role="img"><path d="M5 9h14M5 15h14M15 4L9 20"/></svg>';
+runs.recon = async () => {
+  const w = seq('recon'), z = $('#zip'), sum = $('#reconSum');
+  $$('.zrow', z).forEach(e => e.remove()); sum.innerHTML = '&nbsp;';
+  const built = reconRows.map(([id, a, b]) => {
+    const bad = a !== b, wrap = [];
+    const l = document.createElement('div'); l.className = 'zl zrow'; l.innerHTML = `<span>${id}</span><span>${a}</span>`;
+    const m = document.createElement('div'); m.className = 'zm zrow'; m.innerHTML = bad ? badIcon : okIcon;
+    const r = document.createElement('div'); r.className = 'zr zrow'; r.innerHTML = `<span>${id}</span><span>${b}</span>`;
+    if (bad){ l.style.borderColor = r.style.borderColor = '#F1B9BB'; l.style.background = r.style.background = '#FDF3F3'; }
+    z.append(l, m, r); wrap.push(l, m, r);
+    let d = null; if (bad){ d = document.createElement('div'); d.className = 'miss-detail zrow'; d.innerHTML = `<div>${id}: ledger says ${a}, gateway says ${b}. Flagged for review, nothing changed automatically.</div>`; z.append(d); }
+    return {l, m, r, d};
+  });
+  try{
+    for (const row of built){
+      await w(320); row.l.classList.add('on'); row.r.classList.add('on');
+      await w(380); row.m.classList.add('on');
+      if (row.d){ await w(250); row.d.classList.add('on'); }
+    }
+    await w(300); sum.textContent = '4 matched · 1 mismatch flagged for review';
+  } catch(e){}
+};
+
+/* ---------- chaos bench ---------- */
+const mods = $$('.mod');
+const defaultStatus = new Map(mods.map(m => [m, $('.mod-status', m).textContent]));
+function setDown(m, down){
+  const sw = $('.switch', m);
+  if (down){
+    m.classList.remove('down'); void m.offsetWidth; m.classList.add('down');
+    sw.setAttribute('aria-checked','false');
+    $('.mod-status', m).textContent = m.dataset.mod === 'network' ? 'dropping 30% · +400 ms' : 'killed · restarting…';
+    chaosGauge.kick(5 + Math.random() * 4);
+  } else {
+    m.classList.remove('down'); sw.setAttribute('aria-checked','true'); $('.mod-status', m).textContent = defaultStatus.get(m);
+  }
+}
+let faults = 0;
+function killFor(m, ms){
+  if (m.classList.contains('down')) return;
+  faults++; $('#cFaults').textContent = faults; setDown(m, true);
+  setTimeout(() => setDown(m, false), RM ? 600 : ms);
+}
+mods.forEach(m => {
+  $('.kill', m).addEventListener('click', () => killFor(m, 1600));
+  $('.switch', m).addEventListener('click', () => { if (m.classList.contains('down')) setDown(m, false); else killFor(m, 1600); });
+});
+let chaosRunning = false;
+$('#runChaos').addEventListener('click', async () => {
+  if (chaosRunning) return; chaosRunning = true;
+  const btn = $('#runChaos'), res = $('#cResult'), cnt = $('#cCount');
+  btn.disabled = true; btn.textContent = 'running…'; faults = 0; $('#cFaults').textContent = '0';
+  res.classList.remove('ok'); res.textContent = 'running 10,000 transfers with faults injected at random…';
+  const total = 10000, dur = RM ? 0 : 9000, start = performance.now();
+  let nextFault = start + 600;
+  await new Promise(done => {
+    const tick = now => {
+      const p = dur ? Math.min(1, (now - start) / dur) : 1;
+      cnt.textContent = Math.floor(total * (1 - Math.pow(1 - p, 1.6))).toLocaleString('en-IN');
+      if (now > nextFault && p < .88){
+        const up = mods.filter(m => !m.classList.contains('down'));
+        if (up.length) killFor(up[Math.floor(Math.random() * up.length)], 1100 + Math.random() * 900);
+        nextFault = now + 700 + Math.random() * 800;
+      }
+      if (p < 1) requestAnimationFrame(tick); else done();
+    };
+    requestAnimationFrame(tick);
+  });
+  cnt.textContent = total.toLocaleString('en-IN');
+  await sleep(1400);
+  res.innerHTML = `<b>7 / 7 invariants passed</b> · drift ₹0.00 · ${faults} faults injected · 0 double charges`;
+  res.classList.add('ok'); btn.disabled = false; btn.textContent = 'run again'; chaosRunning = false;
+});
+
+/* ---------- autoplay plates when visible, replay buttons ---------- */
+let dashVisible = false;
+const played = new Set();
+const io = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    const name = e.target.dataset.run;
+    if (name === 'dash') dashVisible = e.isIntersecting;
+    if (e.isIntersecting && !played.has(name) && runs[name]){ played.add(name); runs[name](); }
+  });
+}, {threshold: .3});
+$$('[data-run]').forEach(s => io.observe(s));
+$$('[data-replay]').forEach(b => b.addEventListener('click', () => runs[b.dataset.replay]()));
+</script>
+</body>
+</html>

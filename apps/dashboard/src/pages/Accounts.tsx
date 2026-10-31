@@ -1,4 +1,4 @@
-import { Card, DataTable, ErrorNote, Id, KeyValue, Money, PageHeader, Select, Spinner, StatusBadge, formatTime } from '@zerodrift/ui';
+import { Card, DataTable, ErrorNote, Id, KeyValue, Money, PageHeader, Select, Skeleton, StatusBadge, formatTime } from '@zerodrift/ui';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useApi } from '../hooks.js';
 import type { Account, Entry } from '../types.js';
@@ -27,16 +27,16 @@ export function AccountsPage() {
       {error && <ErrorNote error={error} onRetry={reload} />}
       <Card>
         {loading && !data ? (
-          <Spinner />
+          <Skeleton />
         ) : (
           <DataTable
             rows={data?.accounts ?? []}
             rowKey={(a) => a.id}
-            onRowClick={(a) => nav(`/accounts/${a.id}`)}
+            onRowClick={(a) => nav(`/app/accounts/${a.id}`)}
             columns={[
               { header: 'Owner', cell: (a) => <span>{a.ownerType === 'merchant' ? <Id id={a.ownerId} /> : a.ownerId} <span className="text-xs text-muted">({a.ownerType})</span></span> },
               { header: 'Type', cell: (a) => a.type.replace(/_/g, ' ') },
-              { header: 'Available', cell: (a) => <Money minor={a.availableMinor} className={BigInt(a.availableMinor) < 0n ? 'text-danger' : ''} />, className: 'text-right' },
+              { header: 'Available', cell: (a) => <Money minor={a.availableMinor} className={BigInt(a.availableMinor) < 0n ? 'text-failed-ink' : ''} />, className: 'text-right' },
               { header: 'Held', cell: (a) => <Money minor={a.heldMinor} />, className: 'text-right' },
               { header: 'Status', cell: (a) => <StatusBadge status={a.status === 'active' ? 'up' : a.status} /> },
             ]}
@@ -51,14 +51,14 @@ export function AccountDetailPage() {
   const { id } = useParams();
   const acc = useApi<Account>(`/api/accounts/${id}`, { pollMs: 4000 });
   const entries = useApi<{ entries: Entry[] }>(`/api/accounts/${id}/entries?limit=100`, { pollMs: 4000 });
-  if (acc.loading && !acc.data) return <Spinner />;
+  if (acc.loading && !acc.data) return <Skeleton />;
   if (!acc.data) return <ErrorNote error={acc.error ?? 'Not found'} onRetry={acc.reload} />;
   const a = acc.data;
 
   return (
     <>
       <PageHeader title={`${a.ownerType} · ${a.type.replace(/_/g, ' ')}`} subtitle={<code className="font-mono text-xs">{a.id}</code>} />
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card title="Balance">
           <KeyValue
             items={[
@@ -83,9 +83,9 @@ export function AccountDetailPage() {
           empty="No entries yet."
           columns={[
             { header: 'Time', cell: (e) => formatTime(e.createdAt) },
-            { header: 'Direction', cell: (e) => <span className={e.direction === 'credit' ? 'text-success' : 'text-danger'}>{e.direction}</span> },
+            { header: 'Direction', cell: (e) => <span className={e.direction === 'credit' ? 'text-settled-ink' : 'text-failed-ink'}>{e.direction}</span> },
             { header: 'Amount', cell: (e) => <Money minor={e.amountMinor} />, className: 'text-right' },
-            { header: 'Transaction', cell: (e) => <Link className="text-accent underline" to={`/ledger?tx=${e.transactionId}`}><Id id={e.transactionId} /></Link> },
+            { header: 'Transaction', cell: (e) => <Link className="underline" to={`/app/ledger?tx=${e.transactionId}`}><Id id={e.transactionId} /></Link> },
           ]}
         />
       </Card>

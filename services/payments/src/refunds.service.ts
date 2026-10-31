@@ -46,6 +46,7 @@ export class RefundsService {
     const created = await this.db.transaction().execute(async (trx) => {
       const begin = await this.idempotency.begin(trx, merchant.id, key, requestHash, 'refund');
       if (begin.kind === 'replay') return { kind: 'replay' as const, replay: begin };
+      if (begin.kind === 'in_progress') return { kind: 'in_progress' as const };
 
       // Lock the payment: all refunds of one payment serialise on this row.
       const p = await trx.selectFrom('payments').selectAll().where('id', '=', paymentId).where('merchant_id', '=', merchant.id).forUpdate().executeTakeFirst();
@@ -75,6 +76,7 @@ export class RefundsService {
       return { kind: 'created' as const, refund };
     });
 
+    if (created.kind === 'in_progress') throw Errors.requestInProgress();
     if (created.kind === 'replay') {
       const stored = created.replay.body as RefundView;
       if (stored.status === 'pending') {

@@ -59,6 +59,38 @@ export class AuthController {
   }
 }
 
+/**
+ * The only unauthenticated data route: whether the books balance right now. It exposes nothing sensitive
+ * (one yes/no and the drift in paise, which must be 0), is read-only, and is cached for 5 seconds so a crowd
+ * on the public landing page cannot turn into load on the ledger.
+ */
+@Controller('api/public')
+export class PublicController {
+  private readonly ledger: Upstream;
+  private cache: { at: number; body: { available: boolean; ok: boolean | null; driftMinor: string | null; checkedAt: string | null } } | null = null;
+
+  constructor(@Inject(CONFIG) config: DashboardConfig) {
+    this.ledger = new Upstream('ledger', config.upstreams.ledger);
+  }
+
+  @Get('status')
+  async status() {
+    if (this.cache && Date.now() - this.cache.at < 5_000) return this.cache.body;
+    let body = { available: false, ok: null as boolean | null, driftMinor: null as string | null, checkedAt: null as string | null };
+    try {
+      const r = await this.ledger.request('GET', '/internal/invariants');
+      if (r.status === 200) {
+        const inv = r.data as { ok: boolean; totalBalanceMinor: string; checkedAt: string };
+        body = { available: true, ok: inv.ok, driftMinor: inv.totalBalanceMinor, checkedAt: inv.checkedAt };
+      }
+    } catch {
+      /* ledger unreachable: report "not available", never a made-up zero */
+    }
+    this.cache = { at: Date.now(), body };
+    return body;
+  }
+}
+
 /** Everything under /api needs a valid operator JWT. The BFF calls the services with their admin tokens. */
 @Controller('api')
 @UseGuards(JwtGuard)

@@ -371,3 +371,26 @@ describe('serving the app', () => {
     expect(evil.headers.get('access-control-allow-origin')).toBeNull();
   });
 });
+
+describe('public status (the landing-page drift meter)', () => {
+  it('needs no token, exposes only ok + drift, and never invents a zero when the ledger is down', async () => {
+    ledger.handler = (_m, url) => (url === '/internal/invariants' ? { status: 200, body: { ok: true, totalBalanceMinor: '0', checkedAt: '2026-10-31T10:00:00.000Z', moneyInSystemMinor: '123456', unbalancedTransactions: [] } } : { status: 200, body: {} });
+    const api2 = await startDashboardApi({ port: 0, config: cfg({ staticDir: undefined }), logLevel: 'silent' });
+    try {
+      const up = await call('/api/public/status', { token: null, base: api2.url });
+      expect(up.status).toBe(200);
+      expect(up.body).toEqual({ available: true, ok: true, driftMinor: '0', checkedAt: '2026-10-31T10:00:00.000Z' }); // moneyInSystem is NOT exposed publicly
+    } finally {
+      await api2.close();
+    }
+    ledger.handler = () => ({ status: 503, body: {} });
+    const api3 = await startDashboardApi({ port: 0, config: cfg({ staticDir: undefined }), logLevel: 'silent' });
+    try {
+      const down = await call('/api/public/status', { token: null, base: api3.url });
+      expect(down.body).toEqual({ available: false, ok: null, driftMinor: null, checkedAt: null });
+    } finally {
+      await api3.close();
+      ledger.handler = () => ({ status: 200, body: {} });
+    }
+  });
+});

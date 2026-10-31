@@ -8,6 +8,8 @@ export interface InvariantReport {
   checkedAt: string;
   /** Sum of (available + held) over ALL accounts. Must be exactly 0: money is only ever moved. */
   totalBalanceMinor: string;
+  /** Money held by customers, merchants and the platform (everything except the gateway clearing account): what has entered the system. */
+  moneyInSystemMinor: string;
   unbalancedTransactions: string[];
   balanceMismatches: { accountId: string; stored: string; fromEntries: string }[];
   heldMismatches: { accountId: string; held: string; activeHolds: string }[];
@@ -55,10 +57,15 @@ export class InvariantsService {
     const total = await sql<{ total: string }>`
       SELECT COALESCE(SUM(available_minor + held_minor), 0)::text AS total FROM account_balances`.execute(this.db);
 
+    const inSystem = await sql<{ total: string }>`
+      SELECT COALESCE(SUM(b.available_minor + b.held_minor), 0)::text AS total
+      FROM account_balances b JOIN accounts a ON a.id = b.account_id WHERE a.type <> 'gateway_clearing'`.execute(this.db);
+
     const report: InvariantReport = {
       ok: false,
       checkedAt: new Date().toISOString(),
       totalBalanceMinor: total.rows[0]!.total,
+      moneyInSystemMinor: inSystem.rows[0]!.total,
       unbalancedTransactions: unbalanced.rows.map((r) => r.transaction_id),
       balanceMismatches: mismatches.rows.map((r) => ({ accountId: r.account_id, stored: r.stored, fromEntries: r.computed })),
       heldMismatches: held.rows.map((r) => ({ accountId: r.account_id, held: r.held, activeHolds: r.active })),

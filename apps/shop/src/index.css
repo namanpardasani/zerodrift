@@ -1,3 +1,41 @@
 @import 'tailwindcss';
 @import '@zerodrift/ui/theme.css';
+@import '@fontsource-variable/fraunces/wght.css';
 @source "../../../packages/ui/src";
+
+/*
+ * Café Aman is a MERCHANT, not Zerodrift: its own warm identity (cream paper, espresso ink, one cardamom-green accent)
+ * and a friendly serif for headlines. It re-skins the shared components just by overriding the tokens they read.
+ */
+:root {
+  --paper: #fbf6ee;
+  --card: #fffdf9;
+  --ink: #2b1d14;
+  --ink-2: #5b4636;
+  --muted: #7a6a5c;
+  --rule: #e8dccb;
+  --shop-accent: #2f6b4f;
+  --shop-accent-soft: #e6f0ea;
+  --signal: #2f6b4f;
+  --signal-edge: #1d4533;
+  --signal-text: #2f6b4f;
+  --font-display: 'Fraunces Variable', Georgia, 'Times New Roman', serif;
+}
+html {
+  background: var(--paper);
+}
+.shop-display {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: -0.015em;
+}
+
+@theme inline {
+  --color-shop-accent: var(--shop-accent);
+  --color-shop-accent-soft: var(--shop-accent-soft);
+}
+
+/* white text on the shop's green hardware buttons (the dark text of the Zerodrift orange does not reach AA on green) */
+.zd-hw {
+  color: #ffffff;
+}

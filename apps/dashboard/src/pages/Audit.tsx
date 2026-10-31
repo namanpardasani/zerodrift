@@ -1,4 +1,4 @@
-import { Card, DataTable, ErrorNote, Id, PageHeader, Select, Spinner, formatTime } from '@zerodrift/ui';
+import { Card, DataTable, ErrorNote, Id, PageHeader, Select, Skeleton, formatTime } from '@zerodrift/ui';
 import { useState } from 'react';
 import { useApi } from '../hooks.js';
 
@@ -25,7 +25,7 @@ export function AuditPage() {
       {error && <ErrorNote error={error} onRetry={reload} />}
       {data && data.unavailable.length > 0 && <div className="mb-3"><ErrorNote error={`Could not read the audit trail of: ${data.unavailable.join(', ')}`} /></div>}
       <Card>
-        {loading && !data ? <Spinner /> : (
+        {loading && !data ? <Skeleton /> : (
           <DataTable
             rows={data?.logs ?? []}
             rowKey={(l) => l.id}

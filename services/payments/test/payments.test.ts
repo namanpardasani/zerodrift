@@ -134,6 +134,39 @@ describe('idempotency', () => {
   });
 });
 
+describe('absorbed duplicates are counted (operator console)', () => {
+  it('sequential duplicates of a finished payment bump the counter the admin API shows; a different request does not', async () => {
+    const c = await customer(10_000n);
+    const key = `absorb-${uid()}`;
+    const first = await pay(c, 1_000, key);
+    expect(first.status).toBe(201);
+    await pay(c, 1_000, key);
+    await pay(c, 1_000, key);
+    expect((await pay(c, 1_001, key)).status).toBe(422); // same key, different request: rejected, NOT counted as a duplicate
+    const detail = await fetch(`${s.payments.url}/admin/payments/${first.body.id}`, { headers: { 'x-admin-token': s.payments.config.adminToken } }).then((r) => r.json() as Promise<any>);
+    expect(detail.duplicatesAbsorbed).toBe(2);
+    expect(detail.lastDuplicateAt).toEqual(expect.any(String));
+    expect(detail.idempotencyKey).toBe(key);
+  });
+
+  it('a duplicate that arrives while the first is still in flight is counted too (the 409 does not roll the count back)', async () => {
+    s.gateway.faults.set({ errorRate: 1 }); // the first request ends "processing": the key stays in_progress
+    try {
+      const c = await customer(10_000n);
+      const key = `inflight-${uid()}`;
+      const first = await pay(c, 1_000, key);
+      expect([200, 201, 202, 503]).toContain(first.status);
+      const dup = await pay(c, 1_000, key);
+      expect([202, 409, 200]).toContain(dup.status);
+      const p = await s.payments.db.selectFrom('payments').select('id').where('customer_id', '=', c).executeTakeFirstOrThrow();
+      const detail = await fetch(`${s.payments.url}/admin/payments/${p.id}`, { headers: { 'x-admin-token': s.payments.config.adminToken } }).then((r) => r.json() as Promise<any>);
+      expect(detail.duplicatesAbsorbed).toBeGreaterThanOrEqual(1);
+    } finally {
+      s.gateway.faults.set({});
+    }
+  });
+});
+
 describe('unknown outcomes (timeouts are NOT failures)', () => {
   it('gateway 5xx: payment stays processing with funds held; recovery then completes it exactly once', async () => {
     s.gateway.faults.set({ errorRate: 1 });

@@ -1,4 +1,4 @@
-import { Card, ErrorNote, PageHeader, Sparkline, Spinner, Stat } from '@zerodrift/ui';
+import { Card, ErrorNote, PageHeader, Sparkline, Skeleton, Stat } from '@zerodrift/ui';
 import { useApi } from '../hooks.js';
 import type { MetricsSummary } from '../types.js';
 
@@ -22,7 +22,7 @@ function Trend({ name, title, unit }: { name: string; title: string; unit: strin
 
 export function MetricsPage() {
   const { data, error, loading, reload } = useApi<MetricsSummary>('/api/metrics/summary', { pollMs: 5000 });
-  if (loading && !data) return <Spinner />;
+  if (loading && !data) return <Skeleton />;
   if (!data) return <ErrorNote error={error ?? 'No data'} onRetry={reload} />;
   const s = data.series;
   const breaker = s.gatewayCircuitOpen?.[0]?.value ?? 0;
@@ -41,13 +41,13 @@ export function MetricsPage() {
         <Stat label="Events consumed" value={by(s.consumerMessages, 'result', 'processed')} hint={`${by(s.consumerMessages, 'result', 'duplicate')} duplicates skipped · ${by(s.consumerMessages, 'result', 'dead_lettered')} dead-lettered`} />
         <Stat label="Webhook attempts" value={sum(s.webhookAttempts)} hint={`${by(s.webhookAttempts, 'result', 'failure')} failed`} />
       </div>
-      <div className="mt-6 grid gap-4 lg:grid-cols-3">
+      <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Trend name="throughput" title="Payments succeeded / s" unit="per second" />
         <Trend name="failures" title="Payments failed / s" unit="per second" />
         <Trend name="http5xx" title="Server errors / s" unit="per second" />
       </div>
       <Card title="Request rate by service" className="mt-6">
-        <ul className="divide-y divide-border text-sm">
+        <ul className="divide-y divide-rule text-sm">
           {(s.httpRatePerService ?? []).map((r) => (
             <li key={r.labels.instance} className="flex justify-between py-2"><span>{r.labels.instance}</span><span className="tabular-nums">{r.value.toFixed(2)} req/s</span></li>
           ))}

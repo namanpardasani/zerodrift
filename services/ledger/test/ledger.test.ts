@@ -433,3 +433,14 @@ describe('HTTP API', () => {
     expect(r.totalBalanceMinor).toBe('0');
   });
 });
+
+describe('invariant report: money in system', () => {
+  it('moneyInSystemMinor rises by exactly what is topped up while the global sum stays 0', async () => {
+    const before = await t.invariants.check();
+    await t.wallet('money-in-system', 700n);
+    const after = await t.invariants.check();
+    expect(BigInt(after.moneyInSystemMinor) - BigInt(before.moneyInSystemMinor)).toBe(700n);
+    expect(after.totalBalanceMinor).toBe('0');
+    expect(after.ok).toBe(true);
+  });
+});

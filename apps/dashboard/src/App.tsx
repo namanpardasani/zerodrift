@@ -1,70 +1,40 @@
-import { BRAND_NAME } from '@zerodrift/brand';
-import { Button } from '@zerodrift/ui';
-import { NavLink, Navigate, Outlet, Route, Routes } from 'react-router-dom';
-import { RequireAuth, useAuth } from './auth.js';
-import { AccountDetailPage, AccountsPage } from './pages/Accounts.js';
-import { AuditPage } from './pages/Audit.js';
-import { ChaosPage } from './pages/Chaos.js';
-import { LedgerPage } from './pages/Ledger.js';
+import { type ComponentType, Suspense, lazy } from 'react';
+import { Route, Routes } from 'react-router-dom';
+import { Skeleton } from '@zerodrift/ui';
+import { RequireAuth } from './auth.js';
+import { LandingPage } from './landing/Landing.js';
 import { LoginPage } from './pages/Login.js';
-import { MetricsPage } from './pages/Metrics.js';
-import { OverviewPage } from './pages/Overview.js';
-import { PaymentDetailPage, PaymentsPage } from './pages/Payments.js';
-import { ReconciliationPage } from './pages/Reconciliation.js';
-import { WebhooksPage } from './pages/Webhooks.js';
+import { NotFoundPage } from './pages/NotFound.js';
+import { Shell } from './shell/Shell.js';
 
-const NAV = [
-  { to: '/', label: 'Overview', end: true },
-  { to: '/payments', label: 'Payments' },
-  { to: '/accounts', label: 'Accounts' },
-  { to: '/ledger', label: 'Ledger' },
-  { to: '/webhooks', label: 'Webhooks' },
-  { to: '/reconciliation', label: 'Reconciliation' },
-  { to: '/audit', label: 'Audit log' },
-  { to: '/metrics', label: 'Metrics' },
-  { to: '/chaos', label: 'Chaos' },
-];
+/** The app's pages load on demand: the landing page (the first thing most visitors see) stays small. */
+const page = <K extends string>(load: () => Promise<Record<K, ComponentType>>, name: K) => lazy(() => load().then((m) => ({ default: m[name] })));
+const OverviewPage = page(() => import('./pages/Overview.js'), 'OverviewPage');
+const PaymentsPage = page(() => import('./pages/Payments.js'), 'PaymentsPage');
+const PaymentDetailPage = page(() => import('./pages/Payments.js'), 'PaymentDetailPage');
+const AccountsPage = page(() => import('./pages/Accounts.js'), 'AccountsPage');
+const AccountDetailPage = page(() => import('./pages/Accounts.js'), 'AccountDetailPage');
+const LedgerPage = page(() => import('./pages/Ledger.js'), 'LedgerPage');
+const WebhooksPage = page(() => import('./pages/Webhooks.js'), 'WebhooksPage');
+const WebhookDeliveryPage = page(() => import('./pages/Webhooks.js'), 'WebhookDeliveryPage');
+const ReconciliationPage = page(() => import('./pages/Reconciliation.js'), 'ReconciliationPage');
+const AuditPage = page(() => import('./pages/Audit.js'), 'AuditPage');
+const MetricsPage = page(() => import('./pages/Metrics.js'), 'MetricsPage');
+const ChaosPage = page(() => import('./pages/Chaos.js'), 'ChaosPage');
+const SettingsPage = page(() => import('./pages/Settings.js'), 'SettingsPage');
+const StyleguidePage = page(() => import('./pages/Styleguide.js'), 'StyleguidePage');
 
-function Shell() {
-  const { user, logout } = useAuth();
-  return (
-    <div className="flex min-h-screen flex-col md:flex-row">
-      <aside className="border-b border-border bg-surface md:w-56 md:shrink-0 md:border-b-0 md:border-r">
-        <div className="flex items-center justify-between px-4 py-4 md:block">
-          <div className="text-lg font-semibold tracking-tight">{BRAND_NAME}</div>
-          <div className="text-xs text-muted md:mt-0.5">Operator console</div>
-        </div>
-        <nav aria-label="Main" className="flex gap-1 overflow-x-auto px-2 pb-2 md:block md:space-y-0.5 md:overflow-visible md:pb-0">
-          {NAV.map((n) => (
-            <NavLink
-              key={n.to}
-              to={n.to}
-              end={n.end}
-              className={({ isActive }) => `block whitespace-nowrap rounded-md px-3 py-2 text-sm ${isActive ? 'bg-surface-2 font-medium text-text' : 'text-muted hover:bg-surface-2 hover:text-text'}`}
-            >
-              {n.label}
-            </NavLink>
-          ))}
-        </nav>
-        <div className="hidden px-4 py-4 md:block">
-          <div className="mb-2 text-xs text-muted">Signed in as {user}</div>
-          <Button size="sm" onClick={logout}>
-            Sign out
-          </Button>
-        </div>
-      </aside>
-      <main className="min-w-0 flex-1 p-4 md:p-8">
-        <Outlet />
-      </main>
-    </div>
-  );
-}
-
+/**
+ * Routes. Public: the landing page, the style guide, login. The app lives under /app and needs a session.
+ */
 export function App() {
   return (
     <Routes>
+      <Route path="/" element={<LandingPage />} />
+      <Route path="/styleguide" element={<Suspense fallback={<Skeleton rows={6} className="p-8" />}><StyleguidePage /></Suspense>} />
       <Route path="/login" element={<LoginPage />} />
       <Route
+        path="/app"
         element={
           <RequireAuth>
             <Shell />
@@ -78,12 +48,15 @@ export function App() {
         <Route path="accounts/:id" element={<AccountDetailPage />} />
         <Route path="ledger" element={<LedgerPage />} />
         <Route path="webhooks" element={<WebhooksPage />} />
+        <Route path="webhooks/:id" element={<WebhookDeliveryPage />} />
         <Route path="reconciliation" element={<ReconciliationPage />} />
         <Route path="audit" element={<AuditPage />} />
         <Route path="metrics" element={<MetricsPage />} />
         <Route path="chaos" element={<ChaosPage />} />
+        <Route path="settings" element={<SettingsPage />} />
+        <Route path="*" element={<NotFoundPage inApp />} />
       </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );
 }

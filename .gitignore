@@ -37,3 +37,8 @@ screenshots/tmp/
 
 # Chaos harness output (per-run JSON; docs/CHAOS_RESULTS.md holds the curated results)
 chaos/out/
+
+# only the 1440 and 390 screenshots of each design pass are kept in git; 1024 and 768 are for local checks
+screenshots/**/*-1024.png
+screenshots/**/*-768.png
+screenshots/reference/

@@ -63,6 +63,7 @@ export class PaymentsService {
       // 1. claim the idempotency key (blocks concurrent duplicates until we commit)
       const begin = await this.idempotency.begin(trx, merchant.id, key, requestHash, 'payment');
       if (begin.kind === 'replay') return { kind: 'replay' as const, replay: begin };
+      if (begin.kind === 'in_progress') return { kind: 'in_progress' as const };
 
       // 2. create the payment, its first timeline row and the payment.created event, atomically
       const payment = await trx
@@ -95,6 +96,7 @@ export class PaymentsService {
       return { kind: 'created' as const, payment };
     });
 
+    if (created.kind === 'in_progress') throw Errors.requestInProgress();
     if (created.kind === 'replay') return this.replay(merchant, created.replay);
 
     // 3. run the saga outside any DB transaction (it makes network calls)

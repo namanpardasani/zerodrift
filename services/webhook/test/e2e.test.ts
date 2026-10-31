@@ -76,10 +76,16 @@ describe('payments -> Kafka -> webhooks -> merchant', () => {
     const got = okFor(p.id, 'payment.succeeded')[0]!;
     expect(got.body).toMatchObject({ type: 'payment.succeeded', data: { paymentId: p.id, merchantId: merchant.id, amountMinor: '3300', currency: 'INR' } });
     // and the delivery log says so
-    const log = await fetch(`${webhook.url}/v1/webhook-deliveries?limit=100`, { headers: { authorization: `Bearer ${merchant.apiKey}` } }).then((r) => r.json() as Promise<any>);
-    const mine = log.deliveries.filter((d: { eventType: string; eventId: string }) => d.eventId === got.eventId);
+    // The receiver logs the event the moment it answers; the sender records "succeeded" a moment AFTER it reads that 200,
+    // so wait for the status instead of reading it in the gap between the two (a race this test used to lose now and then).
+    const deliveries = async () => {
+      const log = await fetch(`${webhook.url}/v1/webhook-deliveries?limit=100`, { headers: { authorization: `Bearer ${merchant.apiKey}` } }).then((r) => r.json() as Promise<any>);
+      return log.deliveries.filter((d: { eventType: string; eventId: string }) => d.eventId === got.eventId) as { status: string }[];
+    };
+    await waitFor(async () => (await deliveries()).every((d) => d.status === 'succeeded') || false, 10_000);
+    const mine = await deliveries();
     expect(mine).toHaveLength(1);
-    expect(mine[0].status).toBe('succeeded');
+    expect(mine[0]!.status).toBe('succeeded');
   });
 
   it('a flaky merchant server still gets every event, exactly once as far as it can tell', async () => {

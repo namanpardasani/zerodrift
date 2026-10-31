@@ -6,7 +6,7 @@ import { type INestApplication, Module } from '@nestjs/common';
 import { APP_FILTER, NestFactory } from '@nestjs/core';
 import { ErrorFilter, createHealthModule, createLogger, requestMiddleware } from '@zerodrift/common';
 import express, { type NextFunction, type Request, type Response } from 'express';
-import { ApiController, AuthController } from './api.controller.js';
+import { ApiController, AuthController, PublicController } from './api.controller.js';
 import { CONFIG, JwtGuard, LoginLimiter, TokenService } from './auth.js';
 import { ChaosLoadService } from './chaos-load.service.js';
 import { type DashboardConfig, DEV_DEFAULTS } from './config.js';
@@ -35,7 +35,7 @@ export async function startDashboardApi(opts: { port: number; config: DashboardC
 
   @Module({
     imports: [createHealthModule('dashboard-api')],
-    controllers: [AuthController, ApiController],
+    controllers: [AuthController, ApiController, PublicController],
     providers: [{ provide: CONFIG, useValue: opts.config }, { provide: APP_FILTER, useClass: ErrorFilter }, TokenService, LoginLimiter, JwtGuard, MetricsService, ChaosLoadService],
   })
   class DashboardModule {}

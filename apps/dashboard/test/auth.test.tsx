@@ -60,8 +60,8 @@ describe('api client', () => {
 
 describe('login flow', () => {
   it('redirects an unauthenticated visitor to the login page', async () => {
-    mount('/payments');
-    await screen.findByText(/Console/);
+    mount('/app/payments');
+    await screen.findByText(/Operator console/);
     expect(screen.getByLabelText('Password')).toBeTruthy();
     expect(requests.filter((r) => r.url.startsWith('/api/'))).toHaveLength(0); // no data was requested without a session
   });
@@ -78,13 +78,15 @@ describe('login flow', () => {
   it('a successful login stores the token, opens the console and sends it with data requests', async () => {
     handler = (url) => {
       if (url === '/auth/login') return json(200, { token: 'jwt-abc', user: 'admin', expiresInSeconds: 3600 });
-      if (url === '/api/overview') return json(200, { services: [{ name: 'ledger', up: true, latencyMs: 4 }], payments: { byStatus: {}, last24hByStatus: { succeeded: 3 }, inFlight: { count: 0, oldestSeconds: 0 } }, webhooks: {}, reconciliation: null, ledgerInvariants: { ok: true, totalBalanceMinor: '0' } });
+      if (url === '/api/overview') return json(200, { services: [{ name: 'ledger', up: true, latencyMs: 4 }], payments: { byStatus: {}, last24hByStatus: { succeeded: 3 }, inFlight: { count: 0, oldestSeconds: 0 } }, webhooks: {}, reconciliation: null, ledgerInvariants: { ok: true, totalBalanceMinor: '0', moneyInSystemMinor: '0' } });
+      if (url.startsWith('/api/payments')) return json(200, { payments: [] });
+      if (url === '/api/chaos/status') return json(200, { enabled: false });
       return json(404, {});
     };
     mount('/login');
     fireEvent.change(await screen.findByLabelText('Password'), { target: { value: 'correct-horse' } });
     fireEvent.click(screen.getByText('Sign in'));
-    await screen.findByText('Balanced'); // the overview rendered
+    await screen.findByText(/every transaction balances/); // the overview rendered
     expect(tokenStore.get()).toBe('jwt-abc');
     expect(requests.find((r) => r.url === '/api/overview')!.auth).toBe('Bearer jwt-abc');
   });
@@ -92,7 +94,7 @@ describe('login flow', () => {
   it('an expired session during use drops back to the login page', async () => {
     tokenStore.set('old');
     handler = (url) => (url === '/auth/me' ? json(200, { user: 'admin' }) : json(401, { error: { message: 'Session expired or invalid, log in again' } }));
-    mount('/');
+    mount('/app');
     await waitFor(() => expect(screen.getByLabelText('Password')).toBeTruthy());
     expect(tokenStore.get()).toBeNull();
   });
@@ -106,9 +108,10 @@ describe('chaos page', () => {
       if (url === '/api/chaos/status') return json(200, { enabled: false });
       return json(200, {});
     };
-    mount('/chaos');
+    mount('/app/chaos');
     await screen.findByText(/chaos controller is/i);
-    expect(screen.queryByText('Kill')).toBeNull();
-    expect(screen.queryByText('Reset everything')).toBeNull();
+    expect(screen.queryByText('kill')).toBeNull();
+    expect(screen.queryByText('run chaos test')).toBeNull();
+    expect(screen.queryByText('reset')).toBeNull();
   });
 });

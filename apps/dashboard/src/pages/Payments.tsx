@@ -1,7 +1,9 @@
-import { Card, DataTable, ErrorNote, Id, KeyValue, Money, PageHeader, Select, Spinner, StatusBadge, formatTime, timeAgo } from '@zerodrift/ui';
+import { BRAND_NAME } from '@zerodrift/brand';
+import { Card, DataTable, DoubleTap, ErrorNote, Id, Journal, type JournalLine, KeyValue, Money, MetroLine, PageHeader, Receipt, Rupees, Select, Skeleton, StatusBadge, Timeline, formatClock, formatMinorPlain, formatTime, statusLabel, timeAgo } from '@zerodrift/ui';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useAccountLabels } from '../accountLabels.js';
 import { useApi } from '../hooks.js';
-import type { Payment } from '../types.js';
+import type { LedgerTx, Payment } from '../types.js';
 
 const STATUSES = ['', 'created', 'processing', 'succeeded', 'failed', 'partially_refunded', 'refunded'];
 
@@ -20,28 +22,28 @@ export function PaymentsPage() {
         actions={
           <Select aria-label="Filter by status" value={status} onChange={(e) => setParams(e.target.value ? { status: e.target.value } : {})}>
             {STATUSES.map((s) => (
-              <option key={s} value={s}>{s ? s.replace(/_/g, ' ') : 'All statuses'}</option>
+              <option key={s} value={s}>{s ? statusLabel(s) : 'All statuses'}</option>
             ))}
           </Select>
         }
       />
       {error && <ErrorNote error={error} onRetry={reload} />}
-      <Card>
+      <Card className="overflow-hidden [&>div]:p-0">
         {loading && !data ? (
-          <Spinner />
+          <div className="p-[18px]"><Skeleton /></div>
         ) : (
           <DataTable
             rows={data?.payments ?? []}
             rowKey={(p) => p.id}
-            onRowClick={(p) => nav(`/payments/${p.id}`)}
+            onRowClick={(p) => nav(`/app/payments/${p.id}`)}
             empty="No payments match."
             columns={[
-              { header: 'Payment', cell: (p) => <Id id={p.id} /> },
-              { header: 'Merchant', cell: (p) => p.merchantName },
-              { header: 'Customer', cell: (p) => p.customerId },
-              { header: 'Amount', cell: (p) => <Money minor={p.amountMinor} />, className: 'text-right' },
-              { header: 'Status', cell: (p) => <StatusBadge status={p.status} /> },
-              { header: 'Created', cell: (p) => <span className="text-muted" title={formatTime(p.createdAt)}>{timeAgo(p.createdAt)}</span> },
+              { header: 'id', cell: (p) => <Id id={p.id} /> },
+              { header: 'merchant', cell: (p) => p.merchantName },
+              { header: 'customer', cell: (p) => <span className="mono text-[13px] text-ink-2">{p.customerId}</span> },
+              { header: 'amount', cell: (p) => <Money minor={p.amountMinor} />, className: 'text-right' },
+              { header: 'status', cell: (p) => <StatusBadge status={p.status} /> },
+              { header: 'created', cell: (p) => <span className="mono text-[13px] text-ink-2" title={formatTime(p.createdAt)}>{timeAgo(p.createdAt)}</span> },
             ]}
           />
         )}
@@ -50,46 +52,140 @@ export function PaymentsPage() {
   );
 }
 
+const PATH = ['created', 'processing', 'succeeded', 'refunded'];
+const FAIL_PATH = ['created', 'processing', 'failed'];
+
+/** The state the metro line should stop at: refunds fold into "refunded"; a failed payment gets its own short line. */
+function metro(status: string): { states: string[]; current: string } {
+  if (status === 'failed') return { states: FAIL_PATH, current: 'failed' };
+  if (status === 'partially_refunded') return { states: PATH, current: 'refunded' };
+  return { states: PATH, current: status };
+}
+
 export function PaymentDetailPage() {
   const { id } = useParams();
   const { data: p, error, loading, reload } = useApi<Payment>(`/api/payments/${id}`, { pollMs: 3000 });
-  if (loading && !p) return <Spinner />;
+  const tx = useApi<LedgerTx>(p?.ledgerTxId ? `/api/ledger/transactions/${p.ledgerTxId}` : null);
+  const labels = useAccountLabels(tx.data?.entries.map((e) => e.accountId) ?? []);
+
+  if (loading && !p) return <Skeleton rows={6} />;
   if (!p) return <ErrorNote error={error ?? 'Not found'} onRetry={reload} />;
+
+  const { states, current } = metro(p.status);
+  const settled = ['succeeded', 'partially_refunded', 'refunded'].includes(p.status);
+
+  const lines: JournalLine[] = (tx.data?.entries ?? []).map((e) => {
+    const l = labels[e.accountId];
+    const isMerchant = l?.ownerType === 'merchant' && l.ownerId === p.merchantId;
+    return {
+      account: isMerchant ? p.merchantName : l?.type === 'fees' ? `${BRAND_NAME} fees` : (l?.ownerId ?? <Id id={e.accountId} />),
+      sub: isMerchant ? 'merchant' : l?.type === 'fees' ? 'system' : l ? `${l.ownerType} ${l.type.replace(/_/g, ' ')}` : undefined,
+      direction: e.direction,
+      amountMinor: e.amountMinor,
+    };
+  });
+
+  const receipt = settled && tx.data
+    ? {
+        kind: 'payment receipt',
+        rows: [['pay', p.id.slice(0, 13)], ['from', p.customerId], ['to', p.merchantName], ['time', formatClock(p.createdAt, false)]] as [string, string][],
+        amountMinor: p.amountMinor,
+        ledger: [
+          ['ledger txn', tx.data.id.slice(0, 13)],
+          ['debits', formatMinorPlain(lines.filter((l) => l.direction === 'debit').reduce((sum, l) => sum + BigInt(l.amountMinor), 0n))],
+          ['credits', formatMinorPlain(lines.filter((l) => l.direction === 'credit').reduce((sum, l) => sum + BigInt(l.amountMinor), 0n))],
+        ] as [string, string][],
+        status: statusLabel(p.status).toUpperCase(),
+        barcodeSeed: p.id,
+        fileName: `receipt-${p.id.slice(0, 8)}`,
+      }
+    : null;
 
   return (
     <>
-      <PageHeader title="Payment" subtitle={<code className="font-mono text-xs">{p.id}</code>} actions={<StatusBadge status={p.status} />} />
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="mono text-[13px] text-muted"><Link to="/app/payments" className="hover:underline">payments</Link> / <Id id={p.id} /></div>
+      <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
+        <h1 className="text-[28px] font-semibold leading-tight tracking-[-0.02em] sm:text-4xl"><Rupees minor={p.amountMinor} className="mono" /> to {p.merchantName}</h1>
+        {p.idempotencyKey && <span className="mono text-[13px] text-muted">idempotency key {p.idempotencyKey}</span>}
+      </div>
+      {p.failureReason && <p className="mt-2 text-sm text-failed-ink">Failed: {p.failureReason}</p>}
+
+      <div className="mt-7 grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_300px]">
+        <div>
+          <MetroLine key={current} states={states} current={current} />
+          <div className="mt-7">
+            {p.ledgerTxId ? (
+              tx.data ? (
+                <Journal
+                  key={tx.data.id}
+                  title={<>Journal <Link to={`/app/ledger?tx=${tx.data.id}`} className="underline">{tx.data.id.slice(0, 8)}</Link></>}
+                  meta={`${tx.data.type} · posted ${formatClock(tx.data.createdAt)}`}
+                  lines={lines}
+                />
+              ) : tx.error ? (
+                <ErrorNote error={tx.error} onRetry={tx.reload} />
+              ) : (
+                <Skeleton rows={4} />
+              )
+            ) : (
+              <Card title="Journal"><p className="text-sm text-muted">No ledger transaction yet: the money has not moved. {p.status === 'processing' ? 'The funds are held while the payment is in flight.' : ''}</p></Card>
+            )}
+          </div>
+        </div>
+        {receipt && <Receipt data={receipt} brand={BRAND_NAME} />}
+      </div>
+
+      {(p.duplicatesAbsorbed ?? 0) > 0 && (
+        <section className="mt-9" aria-label="Duplicate requests">
+          <h2 className="mb-3 text-[17px] font-medium tracking-[-0.01em]">A duplicate request was absorbed</h2>
+          <div className="rounded-panel bg-paper p-6">
+            <DoubleTap
+              key={`${p.id}-${p.duplicatesAbsorbed}`}
+              duplicates={p.duplicatesAbsorbed ?? 1}
+              counterLabel={`Charges on ${p.customerId}’s wallet`}
+              request={
+                <>
+                  <div className="mono font-medium">POST /v1/payments</div>
+                  <div className="mono text-muted">Idempotency-Key: {p.idempotencyKey}</div>
+                  <div className="mono">amount {p.amountMinor} · to {p.merchantName}</div>
+                </>
+              }
+              response={`${settled ? '201 created' : '202 accepted'} · ${p.id.slice(0, 8)}`}
+            />
+            {p.lastDuplicateAt && <p className="mono mt-3 text-xs text-muted">last duplicate at {formatClock(p.lastDuplicateAt)}</p>}
+          </div>
+        </section>
+      )}
+
+      <div className="mt-9 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card title="Timeline">
+          <Timeline
+            stepDelay={0.18}
+            steps={(p.events ?? []).map((e, i, all) => ({
+              label: (
+                <span>
+                  {e.fromStatus ? <>{statusLabel(e.fromStatus)} → </> : null}
+                  <b className="font-medium">{statusLabel(e.toStatus)}</b>
+                  {e.reason ? <span className="text-muted"> · {e.reason.replace(/_/g, ' ')}</span> : null}
+                </span>
+              ),
+              time: formatClock(e.at),
+              tone: e.toStatus === 'failed' ? 'failed' : e.toStatus === 'processing' && i === all.length - 1 ? 'pending' : 'settled',
+            }))}
+          />
+        </Card>
         <Card title="Details">
           <KeyValue
             items={[
-              ['Amount', <Money key="a" minor={p.amountMinor} />],
-              ['Platform fee', <Money key="f" minor={p.feeMinor} />],
+              ['Fee', <Money key="f" minor={p.feeMinor} />],
               ['Refunded', <Money key="r" minor={p.refundedMinor} />],
-              ['Merchant', p.merchantName],
               ['Customer', p.customerId],
               ['Merchant reference', p.reference ?? '-'],
-              ['Failure reason', p.failureReason ?? '-'],
-              ['Ledger transaction', p.ledgerTxId ? <Link key="l" className="text-accent underline" to={`/ledger?tx=${p.ledgerTxId}`}><Id id={p.ledgerTxId} /></Link> : '-'],
+              ['Bank reference', p.gatewayRef ?? '-'],
               ['Created', formatTime(p.createdAt)],
               ['Updated', formatTime(p.updatedAt)],
             ]}
           />
-        </Card>
-
-        <Card title="Timeline">
-          <ol className="relative space-y-4 border-l border-border pl-5">
-            {(p.events ?? []).map((e, i) => (
-              <li key={i} className="relative">
-                <span className="absolute -left-[1.6rem] top-1 h-2.5 w-2.5 rounded-full bg-accent" aria-hidden />
-                <div className="flex items-center gap-2 text-sm">
-                  {e.fromStatus && <><StatusBadge status={e.fromStatus} /> <span className="text-muted">→</span></>}
-                  <StatusBadge status={e.toStatus} />
-                </div>
-                <div className="mt-0.5 text-xs text-muted">{formatTime(e.at)}{e.reason ? ` · ${e.reason}` : ''}</div>
-              </li>
-            ))}
-          </ol>
         </Card>
       </div>
 
@@ -99,11 +195,11 @@ export function PaymentDetailPage() {
           rowKey={(r) => r.id}
           empty="No refunds."
           columns={[
-            { header: 'Refund', cell: (r) => <Id id={r.id} /> },
-            { header: 'Amount', cell: (r) => <Money minor={r.amountMinor} />, className: 'text-right' },
-            { header: 'Fee returned', cell: (r) => <Money minor={r.feeRefundMinor} />, className: 'text-right' },
-            { header: 'Status', cell: (r) => <StatusBadge status={r.status} /> },
-            { header: 'Reason', cell: (r) => r.failureReason ?? r.reason ?? '-' },
+            { header: 'refund', cell: (r) => <Id id={r.id} /> },
+            { header: 'amount', cell: (r) => <Money minor={r.amountMinor} />, className: 'text-right' },
+            { header: 'fee returned', cell: (r) => <Money minor={r.feeRefundMinor} />, className: 'text-right' },
+            { header: 'status', cell: (r) => <StatusBadge status={r.status} /> },
+            { header: 'reason', cell: (r) => r.failureReason ?? r.reason ?? '-' },
           ]}
         />
       </Card>
