@@ -212,3 +212,8 @@ and p99 about 11.5 to 14.3 s under 200 virtual users; transfer p50 about 0.9 to 
 - Bugs found and fixed: ledger connection-pool deadlock (regression test added), Kafka data not on its volume (deployment fix). Details above.
 - Known issues: one run (run 1) took 759 s to settle because webhook consumption stalled for several minutes (cause unknown, not reproduced in 5 later runs; broker-side lag sampling added to diagnose a recurrence). Single node: node failure untested. Throughput numbers are for one shared laptop node, not production. `kind load` needs images rebuilt per change (`ONLY="ledger" deploy/kind/up.sh`).
 - Next: Phase 10 DESIGN PAUSE: Playwright screenshots of every page, list pages/components, say "Ready for design." and STOP.
+
+### Phase 10: design pause (2026-10-31)
+- Done: Playwright screenshots of every page of the current UI in `screenshots/phase9-baseline/` (13 PNGs: login, 9 dashboard pages incl. Audit and Chaos, shop home / cart / paid order). All browser checks pass. Nothing was redesigned.
+- Pages: dashboard (Login, Overview, Payments, Accounts, Ledger, Webhooks, Reconciliation, Audit, Metrics, Chaos); demo shop (Products, Cart, Orders). Shared components in `@zerodrift/ui`: Button, Card, PageHeader, Badge/StatusBadge, Stat, DataTable, KeyValue, Money, Id, Spinner, ErrorNote, EmptyState, Field, Input, Select, Sparkline; tokens in `theme.css`. Product name only in `@zerodrift/brand`.
+- Next: WAIT for the user's design references, then Phase 11 (redesign). Phase 12 deployment preparation and Phase 13 learning package follow.
