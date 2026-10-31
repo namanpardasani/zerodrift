@@ -169,6 +169,8 @@ The approved design is `design/zerodrift-design-reference.html` (screenshots of 
 
 ## What happens if X fails
 
+Full component-by-component analysis (what it looks like, what protects the money, how it recovers, what is NOT promised, and the evidence): [docs/FAILURES.md](docs/FAILURES.md). One line each: a payments pod dies mid-payment, recovery finishes it from the state it left; the ledger is down or slow, payments stay `processing` with funds held (a new payment gets 503 before anything is created); the bank times out or loses the answer, recovery *queries* the bank first; Kafka is down, events wait in the outbox tables and drain in order; a webhook pod dies or the merchant is down, deliveries retry with backoff then dead-letter and can be replayed; Redis is down, rate limiting fails open; Postgres is down, nothing partial is committed and everything resumes. Not covered: node, disk and region failure.
+
 ## Chaos results
 
 Full measured results, method and the bugs found: [docs/CHAOS_RESULTS.md](docs/CHAOS_RESULTS.md). Headline (6 chaos runs, 60,000 operations, 167 faults,
@@ -178,6 +180,8 @@ once per endpoint). Throughput on one laptop kind node: 42.6 to 52.2 ops/s with 
 and p99 about 11.5 to 14.3 s under 200 virtual users; transfer p50 about 0.9 to 1.3 s. Bugs found: ledger pool deadlock, Kafka data dir not on the volume.
 
 ## Interview Q&A
+
+[docs/INTERVIEW.md](docs/INTERVIEW.md): 50 questions with answers based on this code (easy to hard), a 2-minute pitch, a 10-minute deep-dive outline, and resume bullets that use only measured numbers. The guided code tour is [docs/LEARN.md](docs/LEARN.md).
 
 ## Progress log
 
@@ -262,3 +266,8 @@ and p99 about 11.5 to 14.3 s under 200 virtual users; transfer p50 about 0.9 to 
 - Done: `deploy/compose/` production stack, `.env.example`, `deploy/build-images.sh`, `values-prod.yaml` + ingress + chart guards, `scripts/verify-prod-chart.mjs` (`pnpm verify:prod`), `scripts/verify-prod-stack.mjs` (`pnpm verify:stack`), `scripts/seed-demo.mjs` / `seed-demo.sh`, `docs/DEPLOYMENT.md` (free-tier guide with 3 options and sources, live vs demo-only table, runbook, checklist), `docs/ENVIRONMENT.md` (every variable), `docs/DEMO_VIDEO.md` (90-second script, 211 words of voice-over), CI `deploy-config` job.
 - Not done on purpose: no deployment, no cloud account, no image push. `pnpm audit:deps` still cannot reach the advisory endpoint from this machine.
 - Next: Phase 13, the learning package (README with Mermaid, docs/LEARN.md, docs/FAILURES.md, docs/INTERVIEW.md with 50 Q&A, pitch, resume bullets from measured numbers, final message).
+
+### Phase 13: learning package (2026-10-31)
+- Done: `README.md` (pitch, two Mermaid diagrams that were parse-checked, features, money rules, guarantees vs what physics forbids, run/prove/limitations, screenshots), `docs/LEARN.md` (reading order, 16 concepts each with the exact file and function, a traced payment, 6 exercises), `docs/FAILURES.md` (every component, what protects the money, how it recovers, what is not promised, measured recovery times), `docs/INTERVIEW.md` (50 Q&A grounded in the code, 2-minute pitch, 10-minute deep-dive outline, resume bullets with measured numbers only).
+- Verified: all 361 tests pass (final full run, exit 0); every relative link and 72 cited file paths exist; every function and trigger named in the docs was found in the code (scripted check); the chaos numbers in the docs match `docs/CHAOS_RESULTS.md` (kill counts per service were recomputed from the run records: payments 43, ledger 31, webhook 27 = 101).
+- All phases 1 to 13 are complete. Open items for the user: run `pnpm audit:deps` from a network where npm's advisory endpoint answers; the unexplained 759 s webhook stall; node-failure chaos; deployment (needs the user's own account).
