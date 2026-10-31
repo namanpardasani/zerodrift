@@ -1,0 +1,236 @@
+# Zerodrift on ONE host (a free VM): `docker compose -f deploy/compose/docker-compose.prod.yml --env-file .env up -d`
+#
+# What is different from the development docker-compose.yml, on purpose:
+#   * NODE_ENV=production: the services REFUSE development secrets, so every secret must come from .env (see .env.example)
+#   * nothing is published to the internet except Caddy (80/443, automatic HTTPS); Postgres, Kafka, Redis stay on the private network
+#   * no chaos-controller, no Toxiproxy, no Docker socket mounted anywhere, no Kafka UI, no Jaeger/Grafana
+#   * Kafka's data is on a named volume (KAFKA_LOG_DIRS): the broker's default directory is NOT the volume and would lose
+#     every topic on a restart (a real bug the chaos test caught)
+#   * secrets are required: `${VAR:?message}` stops `up` with a clear message if one is missing
+#
+# Images: build them once with deploy/build-images.sh (REGISTRY and TAG in .env say where they live).
+name: zerodrift-prod
+
+x-app: &app
+  restart: unless-stopped
+  networks: [internal]
+  environment: &app-env
+    NODE_ENV: production
+    LOG_LEVEL: ${LOG_LEVEL:-info}
+
+x-healthy: &wait-for-data
+  depends_on:
+    postgres: { condition: service_healthy }
+    kafka: { condition: service_healthy }
+    redis: { condition: service_healthy }
+
+services:
+  postgres:
+    image: postgres:17-bookworm
+    restart: unless-stopped
+    networks: [internal]
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-zerodrift}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ../../infra/postgres/init.sh:/docker-entrypoint-initdb.d/init.sh:ro
+    command: ['postgres', '-c', 'max_connections=200', '-c', 'shared_buffers=128MB']
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-zerodrift}']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    networks: [internal]
+    command: ['redis-server', '--save', '', '--appendonly', 'no'] # only rate-limit counters live here: losing them is harmless
+    healthcheck: { test: ['CMD', 'redis-cli', 'ping'], interval: 5s, timeout: 3s, retries: 20 }
+
+  kafka:
+    image: apache/kafka:3.9.0 # KRaft: one node is both broker and controller (no ZooKeeper)
+    restart: unless-stopped
+    networks: [internal]
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'false'
+      KAFKA_LOG_DIRS: /var/lib/kafka/data/logs
+      KAFKA_HEAP_OPTS: ${KAFKA_HEAP_OPTS:--Xms256m -Xmx512m}
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ['CMD-SHELL', '/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1']
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 20s
+
+  ledger:
+    <<: [*app, *wait-for-data]
+    image: ${REGISTRY:-}zerodrift-ledger:${TAG:-latest}
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://${POSTGRES_USER:-zerodrift}:${POSTGRES_PASSWORD}@postgres:5432/ledger
+      KAFKA_BROKERS: kafka:9092
+    healthcheck: &hc3001
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:3001/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  mock-gateway:
+    <<: [*app, *wait-for-data]
+    image: ${REGISTRY:-}zerodrift-mock-gateway:${TAG:-latest}
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://${POSTGRES_USER:-zerodrift}:${POSTGRES_PASSWORD}@postgres:5432/gateway
+      ADMIN_DATABASE_URL: postgres://${POSTGRES_USER:-zerodrift}:${POSTGRES_PASSWORD}@postgres:5432/postgres
+      GATEWAY_CALLBACK_SECRET: ${GATEWAY_CALLBACK_SECRET:?set GATEWAY_CALLBACK_SECRET in .env}
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:3005/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  payments:
+    <<: [*app, *wait-for-data]
+    image: ${REGISTRY:-}zerodrift-payments:${TAG:-latest}
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://${POSTGRES_USER:-zerodrift}:${POSTGRES_PASSWORD}@postgres:5432/payments
+      LEDGER_URL: http://ledger:3001
+      GATEWAY_URL: http://mock-gateway:3005
+      PUBLIC_URL: http://payments:3002 # where the bank posts async callbacks (private network)
+      KAFKA_BROKERS: kafka:9092
+      REDIS_URL: redis://redis:6379
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?set ADMIN_TOKEN in .env}
+      GATEWAY_CALLBACK_SECRET: ${GATEWAY_CALLBACK_SECRET:?set GATEWAY_CALLBACK_SECRET in .env}
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:3002/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  webhook:
+    <<: [*app, *wait-for-data]
+    image: ${REGISTRY:-}zerodrift-webhook:${TAG:-latest}
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://${POSTGRES_USER:-zerodrift}:${POSTGRES_PASSWORD}@postgres:5432/webhook
+      PAYMENTS_URL: http://payments:3002
+      KAFKA_BROKERS: kafka:9092
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?set ADMIN_TOKEN in .env}
+      WEBHOOK_ENCRYPTION_KEY: ${WEBHOOK_ENCRYPTION_KEY:?set WEBHOOK_ENCRYPTION_KEY in .env (openssl rand -base64 32)}
+      # keep false: merchants' webhook URLs must be public (the SSRF guard refuses private addresses). Only for a closed demo
+      # whose receiver lives on the private network (and then NODE_ENV must also allow it): see docs/DEPLOYMENT.md.
+      ALLOW_PRIVATE_WEBHOOK_URLS: ${ALLOW_PRIVATE_WEBHOOK_URLS:-false}
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:3003/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  reconciliation:
+    <<: [*app, *wait-for-data]
+    image: ${REGISTRY:-}zerodrift-reconciliation:${TAG:-latest}
+    environment:
+      <<: *app-env
+      DATABASE_URL: postgres://${POSTGRES_USER:-zerodrift}:${POSTGRES_PASSWORD}@postgres:5432/reconciliation
+      LEDGER_URL: http://ledger:3001
+      PAYMENTS_URL: http://payments:3002
+      GATEWAY_URL: http://mock-gateway:3005
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?set ADMIN_TOKEN in .env}
+      PAYMENTS_ADMIN_TOKEN: ${ADMIN_TOKEN}
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:3004/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  # the operator console + landing page (served by the dashboard BFF)
+  dashboard-api:
+    <<: *app
+    image: ${REGISTRY:-}zerodrift-dashboard-api:${TAG:-latest}
+    depends_on: [payments, ledger, webhook, reconciliation]
+    environment:
+      <<: *app-env
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env (openssl rand -base64 48)}
+      DASHBOARD_USER: ${DASHBOARD_USER:-admin}
+      DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD:?set DASHBOARD_PASSWORD in .env}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?set ADMIN_TOKEN in .env}
+      LEDGER_URL: http://ledger:3001
+      PAYMENTS_URL: http://payments:3002
+      WEBHOOK_URL: http://webhook:3003
+      RECONCILIATION_URL: http://reconciliation:3004
+      CHAOS_URL: http://chaos-controller-is-not-deployed:3006 # unreachable on purpose: the console then hides the chaos bench
+      PROMETHEUS_URL: ${PROMETHEUS_URL:-http://prometheus-is-not-deployed:9090}
+      ALLOWED_ORIGINS: https://${CONSOLE_HOST:-console.localhost}
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:3008/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  # DEMO ONLY: the storefront that shows how a merchant integrates. Remove it for a pure API deployment.
+  demo-shop:
+    <<: *app
+    image: ${REGISTRY:-}zerodrift-demo-shop:${TAG:-latest}
+    depends_on: [payments, webhook]
+    environment:
+      <<: *app-env
+      PAYMENTS_URL: http://payments:3002
+      WEBHOOK_URL: http://webhook:3003
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?set ADMIN_TOKEN in .env}
+      PUBLIC_URL: https://${SHOP_HOST:-shop.localhost} # where webhooks reach the shop: must be a PUBLIC https URL (the SSRF guard)
+    healthcheck:
+      test: ['CMD', 'node', '-e', "fetch('http://127.0.0.1:3009/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  # TLS + routing. Caddy gets and renews free certificates by itself (Let's Encrypt) for every host below.
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    networks: [internal]
+    depends_on: [dashboard-api, demo-shop, payments]
+    ports:
+      - '${HTTP_PORT:-80}:80'
+      - '${HTTPS_PORT:-443}:443'
+    environment:
+      CONSOLE_HOST: ${CONSOLE_HOST:-console.localhost}
+      SHOP_HOST: ${SHOP_HOST:-shop.localhost}
+      API_HOST: ${API_HOST:-api.localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+networks:
+  internal: {}
+
+volumes:
+  pgdata: {}
+  kafka-data: {}
+  caddy-data: {}
+  caddy-config: {}

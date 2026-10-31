@@ -41,6 +41,18 @@ secrets:
 
 serviceType: ClusterIP
 
+# Public entry points (an Ingress). Only the documented public paths are routed: operator paths (/admin, /internal, /metrics)
+# and every other service stay inside the cluster.
+ingress:
+  enabled: false
+  className: ""                 # e.g. nginx
+  annotations: {}               # e.g. cert-manager.io/cluster-issuer: letsencrypt
+  tlsSecretName: zerodrift-tls  # empty = no TLS section (do not do that in production)
+  hosts:
+    console: ""                 # landing page + operator console  -> dashboard-api
+    shop: ""                    # demo storefront (demo only)      -> demo-shop
+    api: ""                     # merchant API                     -> payments (+ webhook endpoints API)
+
 # One entry per service. Generic knobs: enabled, replicas, port, database, env (templated strings),
 # secretEnv (ENV_NAME: key in the secret), probes, resources, nodePort, extra.
 services:
@@ -129,6 +141,18 @@ services:
       JWT_SECRET: jwtSecret
       DASHBOARD_PASSWORD: dashboardPassword
     resources: { requests: { cpu: 25m, memory: 96Mi }, limits: { memory: 256Mi } }
+  demo-shop:
+    # DEMO ONLY: the storefront that shows how a merchant integrates. Leave disabled for a pure API deployment.
+    enabled: false
+    replicas: 1
+    port: 3009
+    env:
+      PAYMENTS_URL: "{{ .Values.infra.paymentsUrl }}"
+      WEBHOOK_URL: "{{ .Values.infra.webhookUrl }}"
+      PUBLIC_URL: ""            # REQUIRED when enabled: the PUBLIC https URL webhooks reach the shop on (the SSRF guard refuses private ones)
+    secretEnv:
+      ADMIN_TOKEN: adminToken
+    resources: { requests: { cpu: 25m, memory: 64Mi }, limits: { memory: 192Mi } }
   chaos-controller:
     # DEV/TEST ONLY. Must never be enabled where nodeEnv is production (the service refuses to start there).
     enabled: false

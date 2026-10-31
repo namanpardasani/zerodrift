@@ -1,0 +1,44 @@
+# Public entry points. Everything else (Postgres, Kafka, Redis, the ledger, /metrics, /admin/*, /internal/*) stays on the
+# private Docker network and is NOT reachable from the internet.
+# NOTE: inside one site, Caddy runs `respond` BEFORE `reverse_proxy` whatever the order written, so routing uses mutually
+# exclusive `handle` blocks (a bare catch-all `respond 404` would swallow every proxied request).
+
+(secure) {
+	encode zstd gzip
+	header Strict-Transport-Security "max-age=31536000"
+}
+
+# The landing page and the operator console (it has its own login, a login rate limit and strict security headers).
+{$CONSOLE_HOST} {
+	import secure
+	reverse_proxy dashboard-api:3008
+}
+
+# The demo merchant's storefront. It also receives the signed webhooks from the webhook service.
+{$SHOP_HOST} {
+	import secure
+	reverse_proxy demo-shop:3009
+}
+
+# The merchant API. Only the documented public paths are routed; operator-only paths do not exist from outside.
+{$API_HOST} {
+	import secure
+
+	@operator path /admin/* /internal/* /metrics /health /ready
+	handle @operator {
+		respond 404
+	}
+
+	@webhooks path /v1/webhook-endpoints* /v1/webhook-deliveries* /v1/webhook-events*
+	handle @webhooks {
+		reverse_proxy webhook:3003
+	}
+
+	handle /v1/* {
+		reverse_proxy payments:3002
+	}
+
+	handle {
+		respond 404
+	}
+}

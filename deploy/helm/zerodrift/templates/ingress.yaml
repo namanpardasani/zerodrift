@@ -1,0 +1,48 @@
+{{- include "zerodrift.validate" . -}}
+{{- if .Values.ingress.enabled }}
+{{- $ing := .Values.ingress }}
+{{- $svc := .Values.services }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: zerodrift
+  labels: {{- include "zerodrift.labels" (dict "root" . "name" "ingress") | nindent 4 }}
+  {{- with $ing.annotations }}
+  annotations: {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- if $ing.className }}
+  ingressClassName: {{ $ing.className }}
+  {{- end }}
+  {{- if $ing.tlsSecretName }}
+  tls:
+    - secretName: {{ $ing.tlsSecretName }}
+      hosts:
+        {{- range $h := list $ing.hosts.console $ing.hosts.shop $ing.hosts.api }}{{ if $h }}
+        - {{ $h | quote }}
+        {{- end }}{{ end }}
+  {{- end }}
+  rules:
+    {{- if $ing.hosts.console }}
+    - host: {{ $ing.hosts.console | quote }}
+      http:
+        paths:
+          - { path: /, pathType: Prefix, backend: { service: { name: dashboard-api, port: { number: {{ (index $svc "dashboard-api").port }} } } } }
+    {{- end }}
+    {{- if $ing.hosts.shop }}
+    - host: {{ $ing.hosts.shop | quote }}
+      http:
+        paths:
+          - { path: /, pathType: Prefix, backend: { service: { name: demo-shop, port: { number: {{ (index $svc "demo-shop").port }} } } } }
+    {{- end }}
+    {{- if $ing.hosts.api }}
+    # the merchant API: ONLY /v1 is public. /admin, /internal, /metrics, /health and /ready are not routed from outside.
+    - host: {{ $ing.hosts.api | quote }}
+      http:
+        paths:
+          {{- range $p := list "/v1/webhook-endpoints" "/v1/webhook-deliveries" "/v1/webhook-events" }}
+          - { path: {{ $p }}, pathType: Prefix, backend: { service: { name: webhook, port: { number: {{ $svc.webhook.port }} } } } }
+          {{- end }}
+          - { path: /v1, pathType: Prefix, backend: { service: { name: payments, port: { number: {{ $svc.payments.port }} } } } }
+    {{- end }}
+{{- end }}

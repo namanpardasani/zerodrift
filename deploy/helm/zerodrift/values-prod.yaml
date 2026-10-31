@@ -1,0 +1,61 @@
+# A production-shaped example. Copy it, change the marked values, never commit real secrets.
+#
+#   helm upgrade --install zerodrift deploy/helm/zerodrift -n zerodrift --create-namespace \
+#     -f deploy/helm/zerodrift/values-prod.yaml --set image.registry=ghcr.io/you/ --set image.tag=v1.0.0
+#
+# Secrets come from a Secret YOU create (kubectl, sealed-secrets, External Secrets, your cloud's secret manager):
+#   kubectl -n zerodrift create secret generic zerodrift-secrets \
+#     --from-literal=POSTGRES_USER=zerodrift --from-literal=POSTGRES_PASSWORD="$(openssl rand -base64 24)" \
+#     --from-literal=adminToken="$(openssl rand -hex 24)" --from-literal=gatewayCallbackSecret="$(openssl rand -hex 24)" \
+#     --from-literal=webhookEncryptionKey="$(openssl rand -base64 32)" --from-literal=jwtSecret="$(openssl rand -base64 48)" \
+#     --from-literal=dashboardPassword="<a long password>"
+image:
+  registry: ""                    # CHANGE: e.g. ghcr.io/your-user/
+  tag: latest                     # CHANGE: pin a release tag, never "latest", in a real deployment
+  pullPolicy: IfNotPresent
+
+nodeEnv: production               # the services refuse development secrets in this mode
+
+secrets:
+  existingSecret: zerodrift-secrets
+
+# Managed (or separately installed) dependencies. Postgres needs 5 databases: ledger, payments, webhook, reconciliation, gateway
+# (infra/postgres/init.sh creates them). Kafka needs the topics the services create at start-up (they do it themselves).
+infra:
+  postgresHost: postgres.example.internal      # CHANGE
+  postgresPort: 5432
+  kafkaBrokers: kafka.example.internal:9092    # CHANGE
+  redisUrl: redis://redis.example.internal:6379 # CHANGE
+  # production traffic goes straight to the services: there is no Toxiproxy in front of them
+  ledgerUrlForPayments: http://ledger:3001
+  gatewayUrlForPayments: http://mock-gateway:3005
+
+observability:
+  otlpEndpoint: ""                # e.g. http://otel-collector:4318 ; empty = tracing off
+
+ingress:
+  enabled: true
+  className: nginx                # CHANGE to your ingress class
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt   # CHANGE: any free ACME issuer
+  tlsSecretName: zerodrift-tls
+  hosts:
+    console: console.example.com  # CHANGE
+    shop: shop.example.com        # CHANGE (demo only; empty it and disable demo-shop for a pure API deployment)
+    api: api.example.com          # CHANGE
+
+services:
+  ledger: { replicas: 2 }
+  payments: { replicas: 3 }
+  webhook: { replicas: 2 }
+  reconciliation: { replicas: 1 }
+  # The mock bank stands in for a real payment gateway. It is the DEMO's bank: with a real gateway you would replace it with an
+  # adapter and set enabled: false. Its fault-injection API is unauthenticated: it must stay inside the cluster (no ingress route).
+  mock-gateway: { enabled: true }
+  dashboard-api: { enabled: true }              # landing page + operator console (own login)
+  demo-shop:
+    enabled: true
+    env:
+      PUBLIC_URL: https://shop.example.com      # CHANGE: must equal ingress.hosts.shop
+  demo-receiver: { enabled: false }             # a test tool
+  chaos-controller: { enabled: false }          # a test tool: the chart REFUSES to render it when nodeEnv is production

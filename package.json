@@ -18,6 +18,8 @@
     "migrate": "pnpm -r --if-present migrate",
     "e2e:smoke": "e2e/run.sh",
     "chaos": "pnpm --filter @zerodrift/chaos chaos",
+    "verify:prod": "node scripts/verify-prod-chart.mjs",
+    "verify:stack": "node scripts/verify-prod-stack.mjs",
     "audit:deps": "node scripts/audit.mjs"
   },
   "devDependencies": {
@@ -30,6 +32,7 @@
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.72.1",
     "unplugin-swc": "^2.0.0",
-    "vitest": "^5.0.5"
+    "vitest": "^5.0.5",
+    "yaml": "^2.9.1"
   }
 }

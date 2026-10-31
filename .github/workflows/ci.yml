@@ -24,7 +24,28 @@ jobs:
     needs: test
     strategy:
       matrix:
-        service: [ledger, payments, webhook, reconciliation, mock-gateway, chaos-controller]
+        service: [ledger, payments, webhook, reconciliation, mock-gateway, dashboard-api, demo-shop, chaos-controller]
     steps:
       - uses: actions/checkout@v4
       - run: docker build --build-arg SERVICE=${{ matrix.service }} -t zerodrift-${{ matrix.service }} .
+
+  deploy-config:
+    # The production configuration is checked on every push: Helm renders the production values and the checks in
+    # scripts/verify-prod-chart.mjs must pass; the production Compose file must validate and must REFUSE to start without secrets.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 12.15.0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24, cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: helm version --short
+      - run: pnpm verify:prod
+      - name: production compose validates with a complete .env
+        run: |
+          printf 'POSTGRES_PASSWORD=x\nADMIN_TOKEN=x-admin-token-123\nGATEWAY_CALLBACK_SECRET=x-callback-secret\nWEBHOOK_ENCRYPTION_KEY=%s\nJWT_SECRET=%s\nDASHBOARD_PASSWORD=x-password\n' "$(openssl rand -base64 32)" "$(openssl rand -base64 48)" > ci.env
+          docker compose -f deploy/compose/docker-compose.prod.yml --env-file ci.env config > /dev/null
+      - name: production compose refuses to start without secrets
+        run: |
+          if docker compose -f deploy/compose/docker-compose.prod.yml --env-file /dev/null config > /dev/null 2>&1; then echo "compose accepted a missing secret"; exit 1; fi
