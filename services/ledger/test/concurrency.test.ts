@@ -181,3 +181,31 @@ describe('get-or-create under contention', () => {
     expect(n).toHaveLength(1);
   });
 });
+
+/**
+ * Bug the chaos test caught: captureHold asked the POOL for the database clock while already holding a
+ * pooled connection in its transaction. With more concurrent captures than pool connections, every
+ * connection was held by a transaction waiting for another one: the whole service wedged for good
+ * (readiness probe timed out, pods stayed NotReady). Nothing may borrow a second connection mid-transaction.
+ */
+describe('connection pool', () => {
+  it('many concurrent captures through a tiny pool all complete (no pool-exhaustion deadlock)', async () => {
+    const small = await createTestLedger(3);
+    try {
+      const merchant = await small.wallet('pool-m', 0n, 'merchant');
+      const holdIds: string[] = [];
+      for (let i = 0; i < 30; i++) {
+        const payer = await small.wallet(`pool-p${i}`, 1_000n);
+        holdIds.push((await small.holds.createHold({ accountId: payer, amountMinor: 500n, idempotencyKey: small.key() })).hold.id);
+      }
+      const captured = await Promise.race([
+        Promise.all(holdIds.map((holdId) => small.holds.captureHold({ holdId, toAccountId: merchant, idempotencyKey: small.key() }))),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('deadlocked: captures did not finish with a 3-connection pool')), 20_000)),
+      ]);
+      expect(captured).toHaveLength(30);
+      expect(await small.balance(merchant)).toEqual({ available: 15_000n, held: 0n });
+    } finally {
+      await small.close();
+    }
+  });
+});

@@ -1,0 +1,17 @@
+# A single-node kind cluster for the chaos test. NodePorts are mapped to localhost ONLY (not the LAN), so the
+# test harness on the host can reach the services and the injected-fault APIs without exposing them.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: zerodrift
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      - { containerPort: 30001, hostPort: 30001, listenAddress: "127.0.0.1" }   # ledger
+      - { containerPort: 30002, hostPort: 30002, listenAddress: "127.0.0.1" }   # payments (merchant API)
+      - { containerPort: 30003, hostPort: 30003, listenAddress: "127.0.0.1" }   # webhook
+      - { containerPort: 30004, hostPort: 30004, listenAddress: "127.0.0.1" }   # reconciliation
+      - { containerPort: 30005, hostPort: 30005, listenAddress: "127.0.0.1" }   # mock gateway (fault knobs, settlement)
+      - { containerPort: 30006, hostPort: 30006, listenAddress: "127.0.0.1" }   # chaos controller
+      - { containerPort: 30007, hostPort: 30007, listenAddress: "127.0.0.1" }   # demo webhook receiver
+      - { containerPort: 30432, hostPort: 30432, listenAddress: "127.0.0.1" }   # postgres (invariant checker)
+      - { containerPort: 30474, hostPort: 30474, listenAddress: "127.0.0.1" }   # toxiproxy API

@@ -1,0 +1,36 @@
+# Test-cluster infrastructure. Everything here is sized for a laptop-class kind cluster.
+postgres:
+  image: postgres:17-bookworm
+  user: zerodrift
+  password: change-me-test-only          # test cluster only; the app chart reads the same value
+  databases: [ledger, payments, webhook, reconciliation, gateway]   # one database per service (no cross-service access)
+  maxConnections: 600
+  sharedBuffers: 256MB
+  storage: 4Gi
+  nodePort: null                          # set (e.g. 30432) to reach it from the host (the chaos invariant checker does)
+  resources:
+    requests: { cpu: 250m, memory: 512Mi }
+    limits: { memory: 1280Mi }
+kafka:
+  image: apache/kafka:3.9.0
+  heap: "-Xms256m -Xmx512m"
+  storage: 4Gi
+  resources:
+    requests: { cpu: 250m, memory: 640Mi }
+    limits: { memory: 1024Mi }
+redis:
+  image: redis:7
+  resources:
+    requests: { cpu: 50m, memory: 32Mi }
+    limits: { memory: 128Mi }
+toxiproxy:
+  enabled: true
+  image: ghcr.io/shopify/toxiproxy:2.12.0
+  nodePort: null                          # the REST API, for fault injection from the host
+  # service -> where its traffic is proxied. payments talks to these proxies, so toxics are real network faults.
+  proxies:
+    - { name: ledger, listen: "0.0.0.0:13001", upstream: "ledger:3001" }
+    - { name: gateway, listen: "0.0.0.0:13005", upstream: "mock-gateway:3005" }
+  resources:
+    requests: { cpu: 25m, memory: 32Mi }
+    limits: { memory: 128Mi }

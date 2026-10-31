@@ -1,0 +1,146 @@
+# Production-oriented defaults. Test-cluster overrides live in values-kind.yaml.
+image:
+  prefix: "zerodrift-"          # image name = <prefix><service>, e.g. zerodrift-ledger
+  tag: latest
+  pullPolicy: IfNotPresent
+  registry: ""                  # e.g. ghcr.io/you/ ; empty = local/kind-loaded images
+
+# NODE_ENV for services. "production" turns on the guards that refuse development secrets.
+nodeEnv: production
+
+# Where the dependencies live (managed services in production).
+infra:
+  postgresHost: postgres
+  postgresPort: 5432
+  kafkaBrokers: kafka:9092
+  redisUrl: redis://redis:6379
+  ledgerUrl: http://ledger:3001
+  paymentsUrl: http://payments:3002
+  webhookUrl: http://webhook:3003
+  gatewayUrl: http://mock-gateway:3005
+  # How payments reaches the ledger and the bank. Point these at Toxiproxy (http://toxiproxy:13001 / :13005)
+  # in a test cluster so network faults can be injected on exactly those links.
+  ledgerUrlForPayments: http://ledger:3001
+  gatewayUrlForPayments: http://mock-gateway:3005
+
+observability:
+  otlpEndpoint: ""              # e.g. http://jaeger:4318 ; empty = tracing off
+
+# Secrets. Either point at a pre-created Secret (recommended: External Secrets / sealed-secrets / your cloud's
+# secret manager) or give values here (the chart then creates one). No defaults on purpose: the chart refuses
+# to render without real values, and the services refuse development values when nodeEnv=production.
+secrets:
+  existingSecret: ""
+  postgresUser: zerodrift
+  postgresPassword: ""
+  adminToken: ""
+  gatewayCallbackSecret: ""
+  webhookEncryptionKey: ""      # base64 of 32 random bytes: openssl rand -base64 32
+  jwtSecret: ""
+  dashboardPassword: ""
+
+serviceType: ClusterIP
+
+# One entry per service. Generic knobs: enabled, replicas, port, database, env (templated strings),
+# secretEnv (ENV_NAME: key in the secret), probes, resources, nodePort, extra.
+services:
+  ledger:
+    enabled: true
+    replicas: 2
+    port: 3001
+    database: ledger
+    env:
+      KAFKA_BROKERS: "{{ .Values.infra.kafkaBrokers }}"
+      DB_POOL_MAX: "20"
+    resources: { requests: { cpu: 100m, memory: 192Mi }, limits: { memory: 512Mi } }
+  payments:
+    enabled: true
+    replicas: 3
+    port: 3002
+    database: payments
+    env:
+      LEDGER_URL: "{{ .Values.infra.ledgerUrlForPayments }}"
+      GATEWAY_URL: "{{ .Values.infra.gatewayUrlForPayments }}"
+      KAFKA_BROKERS: "{{ .Values.infra.kafkaBrokers }}"
+      REDIS_URL: "{{ .Values.infra.redisUrl }}"
+      PUBLIC_URL: "http://payments:3002"     # where the bank posts async callbacks (the Service balances them across replicas)
+      DB_POOL_MAX: "15"
+    secretEnv:
+      ADMIN_TOKEN: adminToken
+      GATEWAY_CALLBACK_SECRET: gatewayCallbackSecret
+    resources: { requests: { cpu: 150m, memory: 192Mi }, limits: { memory: 512Mi } }
+  webhook:
+    enabled: true
+    replicas: 2
+    port: 3003
+    database: webhook
+    env:
+      PAYMENTS_URL: "{{ .Values.infra.paymentsUrl }}"
+      KAFKA_BROKERS: "{{ .Values.infra.kafkaBrokers }}"
+      DB_POOL_MAX: "12"
+    secretEnv:
+      ADMIN_TOKEN: adminToken
+      WEBHOOK_ENCRYPTION_KEY: webhookEncryptionKey
+    resources: { requests: { cpu: 100m, memory: 160Mi }, limits: { memory: 384Mi } }
+  reconciliation:
+    enabled: true
+    replicas: 1
+    port: 3004
+    database: reconciliation
+    env:
+      LEDGER_URL: "{{ .Values.infra.ledgerUrl }}"
+      PAYMENTS_URL: "{{ .Values.infra.paymentsUrl }}"
+      GATEWAY_URL: "{{ .Values.infra.gatewayUrl }}"
+      DB_POOL_MAX: "5"
+    secretEnv:
+      ADMIN_TOKEN: adminToken
+      PAYMENTS_ADMIN_TOKEN: adminToken
+    resources: { requests: { cpu: 50m, memory: 128Mi }, limits: { memory: 320Mi } }
+  mock-gateway:
+    enabled: true
+    replicas: 1
+    port: 3005
+    database: gateway
+    env:
+      # lets the gateway create its own database if it does not exist yet
+      ADMIN_DATABASE_URL: "postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@{{ .Values.infra.postgresHost }}:{{ .Values.infra.postgresPort }}/postgres"
+    secretEnv:
+      GATEWAY_CALLBACK_SECRET: gatewayCallbackSecret
+    resources: { requests: { cpu: 50m, memory: 128Mi }, limits: { memory: 320Mi } }
+  demo-receiver:
+    enabled: false
+    replicas: 1
+    port: 3007
+    probes: { ready: /health }
+    resources: { requests: { cpu: 25m, memory: 64Mi }, limits: { memory: 192Mi } }
+  dashboard-api:
+    enabled: false
+    replicas: 1
+    port: 3008
+    env:
+      LEDGER_URL: "{{ .Values.infra.ledgerUrl }}"
+      PAYMENTS_URL: "{{ .Values.infra.paymentsUrl }}"
+      WEBHOOK_URL: "{{ .Values.infra.webhookUrl }}"
+      RECONCILIATION_URL: "http://reconciliation:3004"
+      CHAOS_URL: "http://chaos-controller:3006"
+      PROMETHEUS_URL: "http://prometheus:9090"
+    secretEnv:
+      ADMIN_TOKEN: adminToken
+      JWT_SECRET: jwtSecret
+      DASHBOARD_PASSWORD: dashboardPassword
+    resources: { requests: { cpu: 25m, memory: 96Mi }, limits: { memory: 256Mi } }
+  chaos-controller:
+    # DEV/TEST ONLY. Must never be enabled where nodeEnv is production (the service refuses to start there).
+    enabled: false
+    replicas: 1
+    port: 3006
+    serviceAccount: true
+    env:
+      NODE_ENV: development
+      CHAOS_ENABLED: "true"
+      CHAOS_BACKEND: kubernetes
+      GATEWAY_URL: "{{ .Values.infra.gatewayUrl }}"
+      TOXIPROXY_URL: "http://toxiproxy:8474"
+    secretEnv:
+      ADMIN_TOKEN: adminToken
+    resources: { requests: { cpu: 25m, memory: 64Mi }, limits: { memory: 192Mi } }

@@ -11,9 +11,9 @@ import { LedgerService } from '../src/ledger.service.js';
 const migrations = import.meta.glob<{ up: (db: any) => Promise<void> }>('../src/migrations/*.ts', { eager: true });
 
 /** A fully wired ledger on its own fresh database, plus an HTTP base URL. */
-export async function createTestLedger() {
+export async function createTestLedger(poolMax = 60) {
   const { url } = await createTestDatabase();
-  const pool = createPool(url, 60);
+  const pool = createPool(url, poolMax);
   const db = createDb<LedgerDB>(pool);
   for (const key of Object.keys(migrations).sort()) await migrations[key]!.up(db);
 

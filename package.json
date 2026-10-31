@@ -17,6 +17,7 @@
     "down": "docker compose down",
     "migrate": "pnpm -r --if-present migrate",
     "e2e:smoke": "e2e/run.sh",
+    "chaos": "pnpm --filter @zerodrift/chaos chaos",
     "audit:deps": "node scripts/audit.mjs"
   },
   "devDependencies": {

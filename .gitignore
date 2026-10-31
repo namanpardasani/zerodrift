@@ -34,3 +34,6 @@ screenshots/tmp/
 
 # Claude local state
 .claude/settings.local.json
+
+# Chaos harness output (per-run JSON; docs/CHAOS_RESULTS.md holds the curated results)
+chaos/out/

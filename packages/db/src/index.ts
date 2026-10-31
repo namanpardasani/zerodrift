@@ -8,8 +8,14 @@ import { Pool, types } from 'pg';
 // passes through a lossy JS number.
 types.setTypeParser(20, (v) => BigInt(v));
 
+/**
+ * Two safety nets so one stuck request can never wedge a whole service:
+ *  - waiting for a free connection fails after 10s instead of waiting forever (a starved pool becomes
+ *    visible errors and 5xx, which clients retry, instead of a silent hang);
+ *  - Postgres kills a session that sits "idle in transaction" for 60s, releasing its row locks.
+ */
 export function createPool(connectionString: string, max = 10): Pool {
-  return new Pool({ connectionString, max });
+  return new Pool({ connectionString, max, connectionTimeoutMillis: 10_000, options: '-c idle_in_transaction_session_timeout=60000' });
 }
 
 export function createDb<DB>(pool: Pool): Kysely<DB> {

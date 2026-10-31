@@ -1,0 +1,78 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+spec:
+  selector: { app.kubernetes.io/name: redis }
+  ports: [{ name: redis, port: 6379, targetPort: 6379 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: redis }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: redis, app.kubernetes.io/part-of: zerodrift-infra }
+    spec:
+      containers:
+        - name: redis
+          image: {{ .Values.redis.image }}
+          args: ["redis-server", "--save", "", "--appendonly", "no"]   # a rate-limit cache: no persistence needed
+          ports: [{ name: redis, containerPort: 6379 }]
+          readinessProbe:
+            exec: { command: ["redis-cli", "ping"] }
+            periodSeconds: 3
+          resources: {{- toYaml .Values.redis.resources | nindent 12 }}
+{{- if .Values.toxiproxy.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: toxiproxy-config
+data:
+  toxiproxy.json: |
+{{ .Values.toxiproxy.proxies | toPrettyJson | indent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: toxiproxy
+spec:
+  selector: { app.kubernetes.io/name: toxiproxy }
+  type: {{ if .Values.toxiproxy.nodePort }}NodePort{{ else }}ClusterIP{{ end }}
+  ports:
+    - { name: api, port: 8474, targetPort: 8474{{ if .Values.toxiproxy.nodePort }}, nodePort: {{ .Values.toxiproxy.nodePort }}{{ end }} }
+{{- range .Values.toxiproxy.proxies }}
+    - { name: {{ .name }}, port: {{ (splitList ":" .listen) | last }}, targetPort: {{ (splitList ":" .listen) | last }} }
+{{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: toxiproxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app.kubernetes.io/name: toxiproxy }
+  template:
+    metadata:
+      labels: { app.kubernetes.io/name: toxiproxy, app.kubernetes.io/part-of: zerodrift-infra }
+    spec:
+      containers:
+        - name: toxiproxy
+          image: {{ .Values.toxiproxy.image }}
+          args: ["-host=0.0.0.0", "-config=/config/toxiproxy.json"]
+          ports: [{ name: api, containerPort: 8474 }]
+          readinessProbe:
+            httpGet: { path: /version, port: 8474 }
+            periodSeconds: 3
+          resources: {{- toYaml .Values.toxiproxy.resources | nindent 12 }}
+          volumeMounts: [{ name: config, mountPath: /config }]
+      volumes:
+        - name: config
+          configMap: { name: toxiproxy-config }
+{{- end }}

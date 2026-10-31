@@ -1,0 +1,31 @@
+{{- $c := index .Values.services "chaos-controller" }}
+{{- if $c.enabled }}
+# The chaos controller kills/scales pods in THIS namespace only. Dev/test clusters only.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: chaos-controller
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: chaos-controller
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets"]
+    verbs: ["get", "list", "patch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments/scale", "statefulsets/scale"]
+    verbs: ["get", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: chaos-controller
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: chaos-controller }
+subjects:
+  - { kind: ServiceAccount, name: chaos-controller }
+{{- end }}

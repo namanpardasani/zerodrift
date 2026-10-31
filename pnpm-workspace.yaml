@@ -2,6 +2,7 @@ packages:
   - packages/*
   - services/*
   - apps/*
+  - chaos
 
 allowBuilds:
   "@swc/core": true

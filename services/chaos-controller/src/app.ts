@@ -5,7 +5,8 @@ import { APP_FILTER } from '@nestjs/core';
 import { ErrorFilter, bootstrap, createHealthModule } from '@zerodrift/common';
 import { GatewayControl, ToxiproxyControl } from './clients.js';
 import { CHAOS_DEPS, ChaosController, ChaosGuard } from './chaos.controller.js';
-import { DockerBackend } from './docker.js';
+import { type ContainerBackend, DockerBackend } from './docker.js';
+import { KubernetesBackend } from './kubernetes.js';
 
 export interface ChaosAppOptions {
   port: number;
@@ -13,6 +14,8 @@ export interface ChaosAppOptions {
   /** Explicit opt-in. Chaos is OFF unless this is true AND the environment is not production. */
   chaosEnabled: boolean;
   adminToken: string;
+  /** Which orchestrator to act on. */
+  backend?: 'docker' | 'kubernetes' | ContainerBackend;
   dockerSocketPath: string;
   composeProject: string;
   gatewayUrl: string;
@@ -32,6 +35,8 @@ export async function startChaos(opts: ChaosAppOptions): Promise<RunningChaos> {
     throw new Error('CHAOS_ENABLED=true is not allowed when NODE_ENV=production: refusing to start the chaos controller');
   }
   const enabled = opts.chaosEnabled && opts.nodeEnv !== 'production';
+  const backend: ContainerBackend =
+    typeof opts.backend === 'object' ? opts.backend : opts.backend === 'kubernetes' ? KubernetesBackend.inCluster() : new DockerBackend(opts.dockerSocketPath, opts.composeProject);
 
   @Module({
     imports: [createHealthModule('chaos-controller')],
@@ -39,7 +44,7 @@ export async function startChaos(opts: ChaosAppOptions): Promise<RunningChaos> {
     providers: [
       {
         provide: CHAOS_DEPS,
-        useValue: { enabled, adminToken: opts.adminToken, docker: new DockerBackend(opts.dockerSocketPath, opts.composeProject), gateway: new GatewayControl(opts.gatewayUrl), toxiproxy: new ToxiproxyControl(opts.toxiproxyUrl) },
+        useValue: { enabled, adminToken: opts.adminToken, docker: backend, gateway: new GatewayControl(opts.gatewayUrl), toxiproxy: new ToxiproxyControl(opts.toxiproxyUrl) },
       },
       { provide: APP_FILTER, useClass: ErrorFilter },
       ChaosGuard,

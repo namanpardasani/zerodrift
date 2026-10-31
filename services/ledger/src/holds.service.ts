@@ -142,7 +142,7 @@ export class HoldsService {
         return { hold: toView(hold), transaction: prior.response as TransactionView, replayed: true };
       }
       if (hold.status !== 'active') throw Errors.holdState(hold.id, hold.status, 'capture');
-      if (hold.expires_at.getTime() <= (await this.ledger.dbNow()).getTime()) throw Errors.holdExpired(hold.id);
+      if (hold.expires_at.getTime() <= (await this.ledger.dbNow(trx)).getTime()) throw Errors.holdExpired(hold.id);
       if (amount <= 0n || amount > hold.amount_minor) {
         throw Errors.validation(`Capture amount must be between 1 and ${hold.amount_minor}`);
       }

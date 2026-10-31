@@ -1,0 +1,58 @@
+# Overlay for the local kind TEST cluster (see deploy/kind/up.sh). Deliberately not production values.
+image:
+  prefix: "zerodrift-"
+  tag: dev
+  pullPolicy: Never              # images are loaded into the cluster with `kind load docker-image`
+
+serviceType: ClusterIP
+
+infra:
+  # the chaos test sends payments' traffic to the ledger and the bank THROUGH Toxiproxy
+  ledgerUrlForPayments: http://toxiproxy:13001
+  gatewayUrlForPayments: http://toxiproxy:13005
+
+secrets:
+  # TEST-ONLY values (random-looking so the production guard accepts them; this cluster is local and disposable)
+  postgresPassword: change-me-test-only
+  adminToken: kind-test-admin-1f8c2a97d4b6
+  gatewayCallbackSecret: kind-test-callback-9e03b5c7a12d
+  webhookEncryptionKey: emVyb2RyaWZ0LWNoYW9zLXRlc3Qta2V5LTMyYnl0ZXM=
+  jwtSecret: kind-test-jwt-secret-0d5e8b21c7f94a36e1b8
+  dashboardPassword: kind-test-dashboard-pw
+
+services:
+  ledger:
+    nodePort: 30001
+  payments:
+    nodePort: 30002
+    env:
+      RECOVERY_STUCK_AFTER_SECONDS: "15"      # the chaos test wants recovery to react within seconds, not minutes
+      RECOVERY_INTERVAL_SECONDS: "5"
+      RECOVERY_ABANDON_AFTER_SECONDS: "120"
+  webhook:
+    nodePort: 30003
+    env:
+      # the in-cluster demo receiver is a private address: the SSRF guard must be relaxed, which the service
+      # only allows outside production. A deliberate test-cluster deviation.
+      NODE_ENV: development
+      ALLOW_PRIVATE_WEBHOOK_URLS: "true"
+      WEBHOOK_BACKOFF_BASE_MS: "1000"
+      WEBHOOK_BACKOFF_MAX_MS: "15000"
+      WEBHOOK_MAX_ATTEMPTS: "10"
+  reconciliation:
+    nodePort: 30004
+    env:
+      RECON_GRACE_SECONDS: "5"
+      RECON_CONFIRM_DELAY_SECONDS: "2"
+      INTERNAL_RUN_INTERVAL_SECONDS: "3600"
+      EXTERNAL_RUN_INTERVAL_SECONDS: "3600"
+  mock-gateway:
+    nodePort: 30005
+  demo-receiver:
+    enabled: true
+    nodePort: 30007
+  dashboard-api:
+    enabled: false
+  chaos-controller:
+    enabled: true
+    nodePort: 30006

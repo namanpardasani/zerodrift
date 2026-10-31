@@ -1,0 +1,8 @@
+apiVersion: v2
+name: zerodrift-infra
+description: >-
+  Stateful dependencies for Zerodrift (Postgres, Kafka in KRaft mode, Redis, Toxiproxy) for LOCAL/TEST clusters
+  such as kind. Not for production: use managed Postgres/Kafka/Redis there.
+type: application
+version: 0.1.0
+appVersion: "1"

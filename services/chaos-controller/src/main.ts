@@ -7,6 +7,8 @@ import { startChaos } from './app.js';
 const env = loadConfig(
   {
     CHAOS_ENABLED: z.stringbool().default(false),
+    /** docker (compose) or kubernetes (in-cluster ServiceAccount). */
+    CHAOS_BACKEND: z.enum(['docker', 'kubernetes']).default('docker'),
     ADMIN_TOKEN: z.string().min(8).default('dev-admin-token'),
     DOCKER_SOCKET: z.string().default('/var/run/docker.sock'),
     COMPOSE_PROJECT: z.string().default('zerodrift'),
@@ -21,6 +23,7 @@ startChaos({
   nodeEnv: env.NODE_ENV,
   chaosEnabled: env.CHAOS_ENABLED && chaosEnabled({ ...process.env, CHAOS_ENABLED: String(env.CHAOS_ENABLED) }),
   adminToken: env.ADMIN_TOKEN,
+  backend: env.CHAOS_BACKEND,
   dockerSocketPath: env.DOCKER_SOCKET,
   composeProject: env.COMPOSE_PROJECT,
   gatewayUrl: env.GATEWAY_URL,

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: zerodrift
+description: "Zerodrift payments platform: ledger, payments, webhook, reconciliation and mock gateway services, plus an optional demo receiver, dashboard API and (test clusters only) chaos controller"
+type: application
+version: 0.1.0
+appVersion: "1"

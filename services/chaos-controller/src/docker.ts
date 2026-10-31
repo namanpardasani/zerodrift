@@ -12,12 +12,18 @@ export interface ContainerInfo {
 /** What chaos can act on. Everything else (databases, this controller itself, the dashboard) is off limits. */
 export const CHAOS_TARGETS = ['ledger', 'payments', 'webhook', 'reconciliation', 'mock-gateway', 'demo-shop', 'demo-receiver', 'kafka', 'redis'] as const;
 
+/** What chaos needs from an orchestrator: list the controllable services and act on one. */
+export interface ContainerBackend {
+  list(): Promise<(ContainerInfo & { id?: string })[]>;
+  act(service: string, action: ContainerAction): Promise<void>;
+}
+
 /**
  * Minimal Docker Engine API client over the unix socket (no docker CLI needed inside the container).
  * Containers are found through the labels docker compose puts on them.
  * (A Kubernetes backend with the same shape is added in Phase 9 for pod kills.)
  */
-export class DockerBackend {
+export class DockerBackend implements ContainerBackend {
   constructor(
     private readonly socketPath: string,
     private readonly project: string,

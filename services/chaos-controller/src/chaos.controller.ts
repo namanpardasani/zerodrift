@@ -4,13 +4,13 @@ import { z } from '@zerodrift/config';
 import { timingSafeEqual } from 'node:crypto';
 import type { Request } from 'express';
 import { type GatewayControl, type ToxiproxyControl } from './clients.js';
-import { CHAOS_TARGETS, CONTAINER_ACTIONS, type ContainerAction, type DockerBackend } from './docker.js';
+import { CHAOS_TARGETS, CONTAINER_ACTIONS, type ContainerAction, type ContainerBackend } from './docker.js';
 
 export const CHAOS_DEPS = Symbol('CHAOS_DEPS');
 export interface ChaosDeps {
   enabled: boolean;
   adminToken: string;
-  docker: DockerBackend;
+  docker: ContainerBackend;
   gateway: GatewayControl;
   toxiproxy: ToxiproxyControl;
 }

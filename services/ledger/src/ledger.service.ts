@@ -372,9 +372,14 @@ export class LedgerService {
     throw Errors.notFound('System account', `${type}/${currency}`);
   }
 
-  /** Test/ops helper: server time, to avoid clock skew between app and DB in expiry logic. */
-  async dbNow(): Promise<Date> {
-    const r = await sql<{ now: Date }>`select now() as now`.execute(this.db);
+  /**
+   * Server time, to avoid clock skew between app and DB in expiry logic.
+   * Inside a transaction ALWAYS pass that transaction: using the pool there would borrow a second
+   * connection while holding the first, and enough concurrent requests then deadlock the whole pool
+   * (every connection held by a transaction that is waiting for another one). The chaos test found this.
+   */
+  async dbNow(executor: Db | Trx = this.db): Promise<Date> {
+    const r = await sql<{ now: Date }>`select now() as now`.execute(executor);
     return r.rows[0]!.now;
   }
 }

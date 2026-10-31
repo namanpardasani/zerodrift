@@ -117,6 +117,21 @@ Enforced twice, in code AND in the database (ledger migration `0001_ledger_schem
 - **Merchant webhooks could not be matched to orders when the create-payment response was lost** (events had `paymentId` but not the merchant's `reference`): optional `reference` added to payment events.
 - Test lessons: a test must set up its own state (the chaos "reset" test silently depended on an earlier test leaving Kafka paused); the browser test needs the one deliberate 401 whitelisted.
 
+### Phase 9 decisions (Kubernetes, Helm, chaos harness)
+- **kind + Helm, not minikube:** kind runs the cluster as one Docker container (no VM), loads local images directly (`kind load docker-image`), and fits the 8 GB machine. Single node, so node failure is NOT testable: documented, not faked.
+- **Two charts:** `zerodrift-infra` (Postgres, Kafka KRaft, Redis, Toxiproxy: stateful stand-ins for managed services) and `zerodrift` (all app services from one generic loop over `values.services`). Prod would swap the infra chart for managed services and keep the app chart.
+- **Slim images:** `pnpm deploy --prod` per service (477 MB vs 787 MB), non-root, read-only root filesystem, probes (startup/readiness/liveness), PDBs, topology spread, preStop sleep + graceful termination.
+- **Chaos controller got a Kubernetes backend** (same interface as Docker): kill = force-delete one pod (the Deployment replaces it), stop/start = scale to 0 and back remembering the replica count (never shrinks a service it did not stop), restart = rollout restart. In-cluster ServiceAccount with a minimal Role. Tested against a fake API server.
+- **The checker is independent of the services:** plain SQL on the four databases, and the money-conservation expectation comes from the SEED (what was topped up), not from the ledger it checks. Tests corrupt a real DB to prove each check can fail.
+- **Harness is TypeScript run by tsx (`pnpm chaos`)**, k6 only for load; databases are not wiped between runs (running totals in `chaos/out/cumulative.json`); `FRESH=1` rebuilds everything.
+- **Load shape:** 200 VUs and 10,000 operations per run. "10,000 concurrent" is interpreted as 10,000 operations in one run with 200 in flight at once; one laptop node cannot hold 10,000 simultaneous connections meaningfully. Stated in CHAOS_RESULTS.md.
+- **`createPool` safety nets:** 10 s connection-acquire timeout and `idle_in_transaction_session_timeout=60s` for every service.
+
+### Bugs the chaos test caught (Phase 9)
+1. **Ledger pool deadlock**: `captureHold` borrowed a second pooled connection (`dbNow()`) inside its transaction; enough concurrent captures held every connection. Fix: pass the transaction; pool timeouts. Test: 30 concurrent captures through a 3-connection pool (fails without the fix).
+2. **Kafka lost all topics on restart**: data dir defaulted to `/tmp/kafka-logs`, not the PVC. Fix: `KAFKA_LOG_DIRS` on the volume + fsGroup. Found by invariant 7 after a Kafka-pause fault.
+3. Harness bug (not product): "settled" ignored published-but-unconsumed events.
+
 ### Phase 8 decisions (observability, rate limiting, security)
 - **Request context** (`@zerodrift/common`): AsyncLocalStorage carries a per-request correlation id (validated, otherwise minted) through every await; HTTP clients forward it (`x-correlation-id`), `emitEvent` stamps it into the event envelope, consumers restore it, so one id finds the logs of one business operation across services and Kafka. Request middleware writes ONE structured log line per request (route PATTERN, status, duration, correlationId, traceId; never query/headers/body), records `http_request_duration_seconds` (histogram) and `http_requests_total`. Quiet for /health /ready /metrics.
 - **Tracing** (`@zerodrift/telemetry`, OpenTelemetry, off unless `OTEL_EXPORTER_OTLP_ENDPOINT` is set; Jaeger all-in-one in compose :16686). Auto-instrumentation for HTTP/Express/pg/undici(fetch). **Kafka has no automatic carrier**, so the W3C `traceparent` travels INSIDE the event envelope (optional, regex-validated field) and the consumer starts its span with that parent: the async tail of a payment (webhook-service consumer, webhook delivery) is part of the same trace as the HTTP request that caused it. Verified live: one trace spans dashboard-api -> payments -> ledger + mock-gateway -> webhook consumers.
@@ -129,6 +144,12 @@ Enforced twice, in code AND in the database (ledger migration `0001_ledger_schem
 ## What happens if X fails
 
 ## Chaos results
+
+Full measured results, method and the bugs found: [docs/CHAOS_RESULTS.md](docs/CHAOS_RESULTS.md). Headline (6 chaos runs, 60,000 operations, 167 faults,
+about 10% duplicate requests, client retries; plus a no-chaos baseline): **all 9 invariants held in every run** (money conserved exactly, every transaction
+balanced, balances == journal, no duplicate charge, nothing stuck, internal and external reconciliation clean, every succeeded payment's webhook delivered exactly
+once per endpoint). Throughput on one laptop kind node: 42.6 to 52.2 ops/s with chaos, 46.7 without (capacity-bound, not chaos-bound); payment p50 about 4.4 to 5.2 s
+and p99 about 11.5 to 14.3 s under 200 virtual users; transfer p50 about 0.9 to 1.3 s. Bugs found: ledger pool deadlock, Kafka data dir not on the volume.
 
 ## Interview Q&A
 
@@ -184,3 +205,10 @@ Enforced twice, in code AND in the database (ledger migration `0001_ledger_schem
 - Bugs found and fixed while building: SIGSEGV from concurrent native Kafka client teardown; an off-by-one in the failed-auth throttle (the attempt crossing the budget returned 401 not 429); a test race where a span was read before it ended; `pnpm audit` hanging (replaced).
 - Known issues / accepted risks: listed in `docs/SECURITY.md` (JWT in sessionStorage, shared admin token, no TLS inside compose, DNS-rebinding window, per-address throttling behind proxies). The stale external-reconciliation findings from the Phase 6 demo still show as "2 open findings" until the volume is reset. Alerting rules (Prometheus Alertmanager) are not defined; dashboards only.
 - Next: Phase 9, THE PROOF: Kubernetes (kind/minikube) + Helm with multiple replicas, then the k6 + chaos + invariant-checker harness. Needs kind, kubectl, helm, k6 installed (none are present yet).
+
+### Phase 9: THE PROOF (2026-10-31)
+- Done: kind + Helm charts (infra and app), slim production images, Kubernetes backend for the chaos controller, `chaos/` package (seed, k6 load, fault injector, independent invariant checker with tests, orchestrator): `pnpm chaos`. 6 full chaos runs (10,000 operations, 24 to 31 faults each: pod kills, bank faults, Kafka pauses, Toxiproxy latency/drops/partitions) plus a baseline: every one of the 9 invariants held in every run. Results in `docs/CHAOS_RESULTS.md`.
+- Verified: lint, build, typecheck clean; **all workspace tests pass** (ledger 41 incl. the new pool-deadlock regression test, chaos checker 14, chaos-controller 17 incl. the Kubernetes backend, payments 57, webhook 31, reconciliation 39, ...). `pnpm audit:deps` could NOT be run this session: the npm registry was unreachable (the command hangs); no new dependency besides `pg`/`@types/pg` (already used elsewhere) was added. Re-run it when the network is back.
+- Bugs found and fixed: ledger connection-pool deadlock (regression test added), Kafka data not on its volume (deployment fix). Details above.
+- Known issues: one run (run 1) took 759 s to settle because webhook consumption stalled for several minutes (cause unknown, not reproduced in 5 later runs; broker-side lag sampling added to diagnose a recurrence). Single node: node failure untested. Throughput numbers are for one shared laptop node, not production. `kind load` needs images rebuilt per change (`ONLY="ledger" deploy/kind/up.sh`).
+- Next: Phase 10 DESIGN PAUSE: Playwright screenshots of every page, list pages/components, say "Ready for design." and STOP.
