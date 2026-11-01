@@ -43,6 +43,9 @@ spec:
     metadata:
       labels: { app.kubernetes.io/name: postgres, app.kubernetes.io/part-of: zerodrift-infra }
     spec:
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
       terminationGracePeriodSeconds: 60
       containers:
         - name: postgres

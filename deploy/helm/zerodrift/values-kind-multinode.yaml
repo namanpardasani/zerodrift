@@ -1,0 +1,10 @@
+# Overlay for the four-node kind cluster (use AFTER values-kind.yaml): the replicated services live on the two "app" nodes,
+# the singletons next to the data, so killing an app node tests a real node failure without taking the database with it.
+services:
+  ledger: { nodeSelector: { zerodrift.io/role: app } }
+  payments: { nodeSelector: { zerodrift.io/role: app } }
+  webhook: { nodeSelector: { zerodrift.io/role: app } }
+  reconciliation: { nodeSelector: { zerodrift.io/role: data } }
+  mock-gateway: { nodeSelector: { zerodrift.io/role: data } }
+  demo-receiver: { nodeSelector: { zerodrift.io/role: data } }
+  chaos-controller: { nodeSelector: { zerodrift.io/role: data } }

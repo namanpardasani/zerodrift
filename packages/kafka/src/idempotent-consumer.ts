@@ -52,6 +52,8 @@ export interface IdempotentConsumerOptions {
   retryBaseMs?: number;
   retryMaxMs?: number;
   fromBeginning?: boolean;
+  /** How long the broker waits without a heartbeat before it declares this member dead and gives its partitions to the others. A crashed pod's work moves after this long. Default 10 s (Kafka's own default is 30 s). */
+  sessionTimeoutMs?: number;
   /** How often to publish this group's lag as the kafka_consumer_lag metric. 0 disables. */
   lagIntervalMs?: number;
   onError?: (err: unknown, info: { topic: string; offset: string; attempt: number }) => void;
@@ -82,7 +84,7 @@ export async function startIdempotentConsumer(opts: IdempotentConsumerOptions): 
   const maxAttempts = opts.maxAttempts ?? 3;
   const dlqProducer: Producer = await createProducer(opts.kafka);
   const consumer = opts.kafka.consumer({
-    kafkaJS: { groupId: opts.groupId, fromBeginning: opts.fromBeginning ?? true, autoCommit: true },
+    kafkaJS: { groupId: opts.groupId, fromBeginning: opts.fromBeginning ?? true, autoCommit: true, sessionTimeout: opts.sessionTimeoutMs ?? 10_000, heartbeatInterval: 3_000 },
   });
   await consumer.connect();
   await consumer.subscribe({ topics: opts.topics });

@@ -18,6 +18,9 @@ spec:
     metadata:
       labels: { app.kubernetes.io/name: redis, app.kubernetes.io/part-of: zerodrift-infra }
     spec:
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: redis
           image: {{ .Values.redis.image }}
@@ -62,6 +65,9 @@ spec:
     metadata:
       labels: { app.kubernetes.io/name: toxiproxy, app.kubernetes.io/part-of: zerodrift-infra }
     spec:
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: toxiproxy
           image: {{ .Values.toxiproxy.image }}

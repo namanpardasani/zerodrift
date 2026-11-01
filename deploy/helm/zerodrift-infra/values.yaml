@@ -1,3 +1,6 @@
+# Pin the stateful pieces (Postgres, Kafka, Redis, Toxiproxy) to labelled nodes. Empty = anywhere (single-node clusters).
+nodeSelector: {}
+
 # Test-cluster infrastructure. Everything here is sized for a laptop-class kind cluster.
 postgres:
   image: postgres:17-bookworm

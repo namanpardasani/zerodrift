@@ -3,6 +3,7 @@
 #   deploy/kind/up.sh                 build images, (re)create nothing that exists, deploy infra + app
 #   SKIP_BUILD=1 deploy/kind/up.sh    reuse images already built/loaded
 #   ONLY="ledger payments" deploy/kind/up.sh   rebuild and roll out just these services
+#   NODES=multi deploy/kind/up.sh     a 4-node cluster (data node + two app nodes) for the node-failure test
 #   deploy/kind/down.sh               delete the cluster
 set -euo pipefail
 cd "$(dirname "$0")/../.."
@@ -12,12 +13,20 @@ NS=zerodrift
 SERVICES=(ledger payments webhook reconciliation mock-gateway demo-receiver chaos-controller)
 [ -n "${ONLY:-}" ] && read -ra SERVICES <<< "$ONLY"
 TAG=dev
+KIND_CONFIG=deploy/kind/kind-config.yaml
+APP_VALUES=()
+INFRA_SET=()
+if [ "${NODES:-single}" = multi ]; then
+  KIND_CONFIG=deploy/kind/kind-config-multinode.yaml
+  APP_VALUES=(-f deploy/helm/zerodrift/values-kind-multinode.yaml)
+  INFRA_SET=(--set 'nodeSelector.zerodrift\.io/role=data')
+fi
 
 for t in docker kind kubectl helm; do command -v $t >/dev/null || { echo "missing $t: run scripts/install-tools.sh" >&2; exit 1; }; done
 
 if ! kind get clusters 2>/dev/null | grep -qx "$CLUSTER"; then
   echo "==> creating kind cluster"
-  kind create cluster --config deploy/kind/kind-config.yaml --wait 180s
+  kind create cluster --config "$KIND_CONFIG" --wait 240s
 fi
 kubectl config use-context "kind-$CLUSTER" >/dev/null
 
@@ -37,9 +46,9 @@ kubectl get ns "$NS" >/dev/null 2>&1 || kubectl create ns "$NS"
 
 echo "==> infrastructure (postgres, kafka, redis, toxiproxy)"
 helm upgrade --install infra deploy/helm/zerodrift-infra -n "$NS" \
-  --set postgres.nodePort=30432 --set toxiproxy.nodePort=30474 --wait --timeout 8m
+  --set postgres.nodePort=30432 --set toxiproxy.nodePort=30474 "${INFRA_SET[@]}" --wait --timeout 10m
 echo "==> application"
-helm upgrade --install zerodrift deploy/helm/zerodrift -n "$NS" -f deploy/helm/zerodrift/values-kind.yaml --wait --timeout 8m
+helm upgrade --install zerodrift deploy/helm/zerodrift -n "$NS" -f deploy/helm/zerodrift/values-kind.yaml "${APP_VALUES[@]}" --wait --timeout 10m
 
 # The tag never changes (`dev`), so Kubernetes cannot see that an image was rebuilt: restart those deployments.
 if [ -z "${SKIP_BUILD:-}" ]; then

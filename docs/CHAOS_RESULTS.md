@@ -64,7 +64,10 @@ How to read the numbers honestly:
   shows that no key ever produced more than one payment.
 - **Run 1 took 759 s to settle** while the others took 8 to 56 s. During that time the webhook consumer's lag stayed flat for several minutes and
   then drained within seconds, with no data loss. I could not reproduce it in five later runs and do not know the cause. After that run I added broker-side
-  consumer-lag sampling to the recovery output (visible in later runs) so a recurrence can be diagnosed. The checks did what they should: they waited
+  consumer-lag sampling to the recovery output (visible in later runs) so a recurrence can be diagnosed, and I measured the obvious suspect:
+  a consumer killed with SIGKILL (like a killed pod) hands its partitions to a survivor in about 30 s (Kafka's default session timeout), nothing
+  lost, nothing handled twice, per-payment order kept (`packages/kafka/test/failover.test.ts`, real Kafka, separate OS processes). The consumers now use a
+  10 s session timeout, which measured 10 to 13 s. So a plain crash does not explain minutes; the cause remains unknown. The checks did what they should: they waited
   for the system to settle and then all passed. This is listed under known issues, not claimed as fixed.
 - Single node: a node failure cannot be tested here (the "node" is one Docker container). Pod, process, network and dependency failures can.
 

@@ -37,6 +37,9 @@ spec:
     metadata:
       labels: {{- include "zerodrift.labels" (dict "root" $root "name" $name) | nindent 8 }}
     spec:
+      {{- with $svc.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
       {{- if $svc.serviceAccount }}
       serviceAccountName: {{ $name }}
       {{- end }}

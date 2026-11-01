@@ -128,8 +128,12 @@ These are enforced in code **and** by the database, and the test suites attack e
 You need Docker, Node 24 and pnpm 12 (`corepack enable` is enough).
 
 ```bash
-docker compose up -d --build        # the whole platform: services, Postgres, Kafka, Redis, console, shop, Grafana, Jaeger
+pnpm install
+pnpm start:local      # one command: builds, starts everything, waits until it is really ready, seeds demo data once, prints the URLs and logins
+pnpm verify:features  # 46 live checks of every feature through the real APIs (payments, idempotency, refunds, webhooks, recovery, ...)
 ```
+
+(`pnpm start:local` is `docker compose up -d --build` plus the waiting and the seeding. `pnpm stop:local` stops it and keeps your data.) A click-by-click checklist for testing everything by hand is in [`docs/MANUAL_TEST.md`](docs/MANUAL_TEST.md).
 
 Then:
 
@@ -206,8 +210,7 @@ Honest list; none of it is hidden in the code:
 - **INR only**, one currency per transaction; currency is still a column everywhere.
 - **One Kubernetes node** in the chaos test: pod, process, network and dependency failures are covered; **node failure is not**. Postgres is a single instance (no failover), Kafka a single broker (replication factor 1).
 - **Throughput numbers are laptop numbers** (about 46 operations/s at 200 concurrent users on a shared 8-CPU, 8 GB machine). They say nothing about how the design scales; the p99 latency was 11 to 14 s under that saturation.
-- One chaos run took 759 s to settle because webhook consumption stalled for several minutes; the cause is unknown and it did not recur in five later runs (consumer-lag sampling was added to diagnose it).
-- `pnpm audit:deps` could not reach npm's advisory endpoint from the build machine; run it from a network where it answers.
+- One chaos run took 759 s to settle because webhook consumption stalled for several minutes; the cause is still unknown and it did not recur in five later runs. What was ruled out by measurement: a crashed consumer's work moves to a survivor in about 30 s (now 10 to 13 s after a tuned session timeout), with nothing lost or handled twice (`packages/kafka/test/failover.test.ts`).
 - Kafka clients speak plain brokers only (no SASL/TLS yet), so managed Kafka services are not supported as-is.
 - The operator console has one account. It is for operating the demo, not a multi-tenant merchant dashboard.
 
@@ -240,7 +243,8 @@ This repository was written to be studied.
 
 1. [`docs/LEARN.md`](docs/LEARN.md): a guided tour in reading order; every core concept with the exact file and function where it lives.
 2. [`docs/FAILURES.md`](docs/FAILURES.md): what happens when each component fails or is slow, and how the system recovers (and what it does not promise).
-3. [`docs/INTERVIEW.md`](docs/INTERVIEW.md): 50 interview questions with answers based on how *this* code works, a 2-minute pitch and a 10-minute deep-dive outline.
+3. [`docs/MANUAL_TEST.md`](docs/MANUAL_TEST.md): test every feature by hand, with what you should see.
+4. [`docs/INTERVIEW.md`](docs/INTERVIEW.md): 50 interview questions with answers based on how *this* code works, a 2-minute pitch and a 10-minute deep-dive outline.
 4. [`NOTES.md`](NOTES.md): the decisions and trade-offs, phase by phase, including every bug found and how.
 5. [`docs/SECURITY.md`](docs/SECURITY.md): the threat model and what each control does.
 

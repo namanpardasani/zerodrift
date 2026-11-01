@@ -20,7 +20,10 @@
     "chaos": "pnpm --filter @zerodrift/chaos chaos",
     "verify:prod": "node scripts/verify-prod-chart.mjs",
     "verify:stack": "node scripts/verify-prod-stack.mjs",
-    "audit:deps": "node scripts/audit.mjs"
+    "audit:deps": "node scripts/audit.mjs",
+    "start:local": "scripts/start-local.sh",
+    "stop:local": "docker compose stop",
+    "verify:features": "node scripts/verify-features.mjs"
   },
   "devDependencies": {
     "@swc/core": "^1.16.20",

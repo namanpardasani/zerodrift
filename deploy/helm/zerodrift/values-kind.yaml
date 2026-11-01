@@ -1,3 +1,6 @@
+# This is a throwaway TEST cluster: the chaos controller is allowed here (and only here).
+allowTestTools: true
+
 # Overlay for the local kind TEST cluster (see deploy/kind/up.sh). Deliberately not production values.
 image:
   prefix: "zerodrift-"

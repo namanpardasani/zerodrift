@@ -1,3 +1,5 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { ADMIN_TOKEN, ENDPOINTS } from './config.js';
 import { call, sleep } from './http.js';
 
@@ -10,7 +12,11 @@ export interface Injection {
   error?: string;
 }
 
+const sh = promisify(execFile);
 const admin = { 'x-admin-token': ADMIN_TOKEN };
+
+/** The kind worker nodes that carry the replicated services (see deploy/kind/kind-config-multinode.yaml). */
+const APP_NODES = ['zerodrift-worker2', 'zerodrift-worker3'];
 const chaos = (method: string, path: string, body?: unknown) => call(method, `${ENDPOINTS.chaos}/chaos${path}`, { headers: admin, body, timeoutMs: 20_000 });
 const rand = (min: number, max: number) => min + Math.random() * (max - min);
 const pick = <T>(items: T[]): T => items[Math.floor(Math.random() * items.length)]!;
@@ -94,11 +100,39 @@ const faults: Fault[] = [
   },
 ];
 
+/**
+ * A WHOLE MACHINE dies: the kind node container is killed (SIGKILL, no graceful shutdown), stays dead for 60 to 90 seconds,
+ * then comes back. Only meaningful on the multi-node cluster (`NODES=multi`), so it is opt-in: NODE_FAILURE=1.
+ * Everything on that node vanishes at once (replicas of ledger, payments, webhook), the others must keep serving, Kubernetes
+ * notices only after its node-monitor grace period (about 40 s), and the node's pods are not rescheduled until it returns.
+ */
+const nodeFailure: Fault = {
+  name: 'node_failure',
+  weight: 2,
+  run: async (record) => {
+    const node = pick(APP_NODES);
+    const seconds = Math.round(rand(60, 90));
+    try {
+      await sh('docker', ['kill', node]);
+      record({ kind: 'node_failure', target: node, detail: { seconds }, ok: true });
+    } catch (err) {
+      record({ kind: 'node_failure', target: node, ok: false, error: (err as Error).message });
+      return;
+    }
+    await sleep(seconds * 1000);
+    await sh('docker', ['start', node]).catch((err) => record({ kind: 'node_restart_failed', target: node, ok: false, error: (err as Error).message }));
+  },
+};
+
+/** FAULTS=a,b restricts the run to those fault names (kill_payments_pod, kafka_pause, node_failure, ...). */
+const only = process.env.FAULTS?.split(',').map((x) => x.trim()).filter(Boolean);
+const active = (process.env.NODE_FAILURE ? [...faults, nodeFailure] : faults).filter((f) => !only || only.includes(f.name));
+
 const weighted = (): Fault => {
-  const total = faults.reduce((s, f) => s + f.weight, 0);
+  const total = active.reduce((s, f) => s + f.weight, 0);
   let n = Math.random() * total;
-  for (const f of faults) if ((n -= f.weight) < 0) return f;
-  return faults[0]!;
+  for (const f of active) if ((n -= f.weight) < 0) return f;
+  return active[0]!;
 };
 
 /**

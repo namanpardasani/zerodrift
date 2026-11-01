@@ -19,6 +19,9 @@ spec:
     metadata:
       labels: { app.kubernetes.io/name: kafka, app.kubernetes.io/part-of: zerodrift-infra }
     spec:
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{- toYaml . | nindent 8 }}
+      {{- end }}
       terminationGracePeriodSeconds: 30
       # the image runs as uid 1000; fsGroup makes the freshly provisioned volume writable by it
       securityContext: { fsGroup: 1000 }

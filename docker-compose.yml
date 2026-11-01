@@ -8,6 +8,7 @@ x-service: &service
 services:
   postgres:
     image: postgres:17-bookworm
+    restart: unless-stopped
     environment: { POSTGRES_USER: zerodrift, POSTGRES_PASSWORD: zerodrift }
     ports: ['55432:5432']
     volumes:
@@ -22,11 +23,13 @@ services:
 
   redis:
     image: redis:7
+    restart: unless-stopped
     ports: ['56379:6379']
     healthcheck: { test: ['CMD', 'redis-cli', 'ping'], interval: 3s, timeout: 3s, retries: 20 }
 
   kafka:
     image: apache/kafka:3.9.0   # KRaft mode: no ZooKeeper
+    restart: unless-stopped
     ports: ['9094:9094']
     environment:
       KAFKA_NODE_ID: 1
@@ -49,6 +52,7 @@ services:
 
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
+    restart: unless-stopped
     ports: ['8080:8080']
     environment:
       KAFKA_CLUSTERS_0_NAME: zerodrift
@@ -57,11 +61,13 @@ services:
 
   prometheus:
     image: prom/prometheus:latest
+    restart: unless-stopped
     ports: ['9090:9090']
     volumes: ['./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro']
 
   grafana:
     image: grafana/grafana:latest
+    restart: unless-stopped
     ports: ['3000:3000']
     environment:
       GF_AUTH_ANONYMOUS_ENABLED: 'true'
@@ -74,11 +80,13 @@ services:
   # Distributed tracing UI + OTLP collector. Every service exports spans to it (OTEL_EXPORTER_OTLP_ENDPOINT).
   jaeger:
     image: jaegertracing/all-in-one:1.62.0
+    restart: unless-stopped
     ports: ['16686:16686']
     environment: { COLLECTOR_OTLP_ENABLED: 'true' }
 
   toxiproxy:
     image: ghcr.io/shopify/toxiproxy:2.12.0
+    restart: unless-stopped
     ports: ['8474:8474']
     volumes: ['./infra/toxiproxy/toxiproxy.json:/config/toxiproxy.json:ro']
     command: ['-host=0.0.0.0', '-config=/config/toxiproxy.json']

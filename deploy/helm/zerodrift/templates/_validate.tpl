@@ -1,8 +1,8 @@
 {{/* Refuse unsafe or incomplete combinations at `helm template` / `helm install` time, with a message that says what to change. */}}
 {{- define "zerodrift.validate" -}}
 {{- $s := .Values.services -}}
-{{- if and (eq .Values.nodeEnv "production") (index $s "chaos-controller").enabled -}}
-{{- fail "services.chaos-controller.enabled=true with nodeEnv=production: the chaos controller breaks things on purpose, it is a test tool and must never run in production" -}}
+{{- if and (index $s "chaos-controller").enabled (not .Values.allowTestTools) -}}
+{{- fail "services.chaos-controller.enabled=true needs allowTestTools=true: the chaos controller breaks things on purpose, it is a test tool and must never run in production. Set allowTestTools only for a throwaway test cluster (values-kind.yaml does)" -}}
 {{- end -}}
 {{- if and (index $s "dashboard-api").enabled (not .Values.secrets.existingSecret) (or (not .Values.secrets.jwtSecret) (not .Values.secrets.dashboardPassword)) -}}
 {{- fail "services.dashboard-api.enabled=true needs secrets.jwtSecret and secrets.dashboardPassword (or secrets.existingSecret with keys jwtSecret and dashboardPassword)" -}}

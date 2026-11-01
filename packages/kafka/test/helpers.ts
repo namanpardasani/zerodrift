@@ -18,7 +18,7 @@ export async function createServiceDb() {
     )`.execute(db);
   await sql`CREATE TABLE handled (event_id uuid, aggregate_id text, n integer, seen_at timestamptz DEFAULT now(), id bigserial PRIMARY KEY)`.execute(db);
   await createInboxTable(db);
-  return { db, pool };
+  return { db, pool, url };
 }
 
 /** Unique topic names per test so tests never see each other's messages. */

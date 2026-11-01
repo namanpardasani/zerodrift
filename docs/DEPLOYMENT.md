@@ -99,7 +99,8 @@ The same flow works on a small k3s cluster on the VM from option A, but plain Co
 - [ ] the dashboard password is long; the console login throttle is on (default)
 - [ ] ports other than 22/80/443 are closed at the cloud firewall
 - [ ] `pg_dump` cron in place and one restore tested
-- [ ] you ran `pnpm audit:deps` from a network where the advisory API answers (it did not from the build machine)
+- [ ] `pnpm audit:deps` is clean for what ships (it was on 1 Nov 2026: 245 package versions, no known vulnerabilities; it falls back to OSV.dev if npm's advisory endpoint is unreachable; run it again right before you deploy)
+- [ ] you ran `pnpm verify:features` and walked through `docs/MANUAL_TEST.md` on your machine
 - [ ] you know this is a portfolio project: it does not move real money
 
 ## Sources (checked 31 Oct 2026)

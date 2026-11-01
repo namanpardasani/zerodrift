@@ -5,6 +5,10 @@ image:
   pullPolicy: IfNotPresent
   registry: ""                  # e.g. ghcr.io/you/ ; empty = local/kind-loaded images
 
+# Test tools (the chaos controller) may only be rendered when this is true. Leave false everywhere that matters; values-kind.yaml sets it
+# for the throwaway test cluster. The chart refuses the chaos controller without it.
+allowTestTools: false
+
 # NODE_ENV for services. "production" turns on the guards that refuse development secrets.
 nodeEnv: production
 
