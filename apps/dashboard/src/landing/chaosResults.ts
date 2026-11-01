@@ -69,3 +69,4 @@ export const CHAOS_BUGS: { title: string; body: string }[] = [
 
 export const CHAOS_DOC_URL = 'https://github.com/namanpardasani/zerodrift/blob/main/docs/CHAOS_RESULTS.md';
 export const REPO_URL = 'https://github.com/namanpardasani/zerodrift';
+export const DOCS_URL = `${REPO_URL}/tree/main/docs`;

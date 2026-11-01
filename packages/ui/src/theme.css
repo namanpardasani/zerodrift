@@ -348,3 +348,13 @@ input[type='range']::-moz-range-thumb {
   border: 2px solid var(--card);
   box-shadow: 0 0 0 1px var(--signal-edge);
 }
+
+/* in-page links land below the sticky top bar, and glide there unless the visitor asked for less motion */
+section[id] {
+  scroll-margin-top: 72px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}

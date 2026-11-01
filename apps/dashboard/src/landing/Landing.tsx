@@ -1,9 +1,10 @@
 import { BRAND_NAME } from '@zerodrift/brand';
-import { Button, CodeBlock, type CodeToken, Count, DoubleTap, IconArrow, IconBolt, IconCheck, IconLedger, IconLock, IconPayments, IconRecon, IconWebhooks, RetryTrack, StageChaos, StageDocs, StageLedger, StageMark, StagePayments, TransferCard, Wordmark, Zd1Device, Zipper, cx } from '@zerodrift/ui';
+import { Button, CodeBlock, type CodeToken, Count, DoubleTap, IconArrow, IconBolt, IconCheck, IconLedger, IconLock, IconPayments, IconRecon, IconWebhooks, RetryTrack, TransferCard, Wordmark, Zd1Device, Zipper, cx } from '@zerodrift/ui';
 import { useInView } from 'motion/react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CHAOS_BUGS, CHAOS_DOC_URL, CHAOS_RUNS, CHAOS_TOTALS, FAULT_KINDS, REPO_URL } from './chaosResults.js';
+import { type PublicStatus, TopBar } from './TopBar.js';
 
 /** Mount children only once they scroll into view, so their entrance animations play when you get there. `replay` restarts them. */
 function InView({ children, replay = 0 }: { children: ReactNode; replay?: number }) {
@@ -22,7 +23,7 @@ function Replay({ onClick }: { onClick: () => void }) {
 
 /** Whether the books balance right now, from the one public endpoint. Unknown stays unknown: never a made-up zero. */
 function usePublicStatus() {
-  const [s, setS] = useState<{ available: boolean; ok: boolean | null; driftMinor: string | null } | null>(null);
+  const [s, setS] = useState<PublicStatus | null>(null);
   useEffect(() => {
     let live = true;
     const load = () =>
@@ -40,62 +41,34 @@ function usePublicStatus() {
   return s;
 }
 
-const NAV = [
-  { href: '/app/ledger', label: 'ledger', lines: ['accounts', 'journal', 'holds'], Icon: StageLedger, internal: true },
-  { href: '#anatomy', label: 'payments', lines: ['api', 'webhooks', 'refunds'], Icon: StagePayments },
-  { href: '#chaos-results', label: 'chaos', lines: ['bench', 'results', 'invariants'], Icon: StageChaos },
-  { href: REPO_URL, label: 'docs', lines: ['guides', 'reference', 'github'], Icon: StageDocs },
-];
-
-function Hero() {
-  const status = usePublicStatus();
+function Hero({ status }: { status: PublicStatus | null }) {
   const drift = status?.available && status.driftMinor !== null ? status.driftMinor : null;
   return (
     <section className="stage" aria-label="Introduction">
-      <nav aria-label="Main" className="mx-auto grid max-w-[1280px] grid-cols-2 items-start gap-6 px-[18px] py-[22px] md:px-8 md:py-7 lg:grid-cols-[auto_repeat(4,minmax(0,1fr))_170px_92px]">
-        <a href="/" className="no-underline" aria-label={`${BRAND_NAME} home`}><Wordmark /></a>
-        {NAV.map(({ href, label, lines, Icon, internal }) => {
-          const inner = (
-            <>
-              <Icon className="hidden h-[46px] w-[46px] flex-none text-on-stage sm:block" />
-              <div>
-                <b className="block text-[22px] font-light leading-none tracking-[-0.01em] sm:text-[26px]">{label}</b>
-                <span className="mt-2 block text-[13px] leading-[1.35] text-on-stage-2">{lines.map((l) => <span key={l} className="block">{l}</span>)}</span>
-              </div>
-            </>
-          );
-          const cls = 'flex gap-3 text-on-stage no-underline hover:[&_b]:text-white';
-          return internal ? <Link key={label} to={href} className={cls}>{inner}</Link> : <a key={label} href={href} className={cls} {...(href.startsWith('http') ? { target: '_blank', rel: 'noreferrer' } : {})}>{inner}</a>;
-        })}
-        <p className="mono hidden text-[10px] leading-[1.45] text-on-stage-2 lg:block">zd-1 is a double-entry payments ledger. it moves money between accounts, and proves under failure that none of it drifts. built with care, tested with violence.</p>
-        <StageMark className="hidden h-[92px] w-[92px] text-on-stage lg:block" />
-      </nav>
-
-      <div className="px-6 pt-9 text-center">
+      <div className="px-6 pt-14 text-center md:pt-20">
+        <p className="mono mb-5 text-[11px] uppercase tracking-[0.14em] text-on-stage-2">a double-entry payments ledger<span className="hidden sm:inline"> · chaos-tested</span></p>
         <h1 className="m-0 text-[clamp(40px,7vw,92px)] font-light leading-[0.95] tracking-[-0.045em]">money that never drifts.</h1>
-        <p className="mono mx-auto mt-4 max-w-[560px] text-[13px] text-on-stage-2">a payments ledger you can kill, unplug and flood with duplicates. the books still balance to the paisa.</p>
+        <p className="mono mx-auto mt-5 max-w-[560px] text-[13px] text-on-stage-2">a payments ledger you can kill, unplug and flood with duplicates. the books still balance to the paisa.</p>
+        <div className="mt-7 flex flex-wrap justify-center gap-3">
+          <a href="#chaos-results"><Button variant="line" size="lg">see the chaos results</Button></a>
+          <Link to="/app"><Button variant="signal" size="lg">open the ledger</Button></Link>
+        </div>
       </div>
 
-      <div className="mt-1.5 px-3">
+      <div className="mt-6 px-3">
         <Zd1Device drift={drift ?? '0'} receiptLines={['ZERODRIFT', 'pay_7731', 'riya → café', '₹250.00', 'dr 250.00', 'cr 250.00', 'drift 0.00', 'SETTLED']} />
-        <p className="mono mt-1 text-center text-[11px] text-on-stage-2" role="status">
+        <p className="mono mt-1 text-center text-[11px] text-on-stage-2">
           {status === null ? 'live drift unavailable right now (the needle rests at zero, the display shows the example reading)' : status.available ? `live: ${status.ok ? 'every transaction balances' : 'VIOLATION: the books do not balance'}` : 'live drift unavailable right now (the ledger is not answering)'}
           {' · receipt shown is an example'}
         </p>
       </div>
 
-      <div className="mx-auto flex max-w-[1280px] flex-wrap items-end justify-between gap-6 px-[18px] pb-10 pt-3 md:px-8">
-        <ul className="mono m-0 list-none p-0 text-[11px] leading-[1.7] text-on-stage-2">
-          <li>ledger <span className="text-on-stage">double-entry, append-only</span></li>
-          <li>api <span className="text-on-stage">idempotent, every money call</span></li>
-          <li>events <span className="text-on-stage">outbox → kafka, effectively once</span></li>
-          <li>proof <span className="text-on-stage">chaos-tested, invariants checked</span></li>
-        </ul>
-        <div className="flex flex-wrap gap-3">
-          <a href="#chaos-results"><Button variant="line" size="lg">see the chaos results</Button></a>
-          <Link to="/app"><Button variant="signal" size="lg">open the ledger</Button></Link>
-        </div>
-      </div>
+      <ul className="mono mx-auto m-0 max-w-[1280px] list-none px-[18px] pb-12 pt-6 text-[11px] leading-[1.7] text-on-stage-2 md:px-8">
+        <li>ledger <span className="text-on-stage">double-entry, append-only</span></li>
+        <li>api <span className="text-on-stage">idempotent, every money call</span></li>
+        <li>events <span className="text-on-stage">outbox → kafka, effectively once</span></li>
+        <li>proof <span className="text-on-stage">chaos-tested, invariants checked</span></li>
+      </ul>
     </section>
   );
 }
@@ -332,9 +305,11 @@ function Footer() {
 }
 
 export function LandingPage() {
+  const status = usePublicStatus();
   return (
     <div className="bg-paper">
-      <Hero />
+      <TopBar status={status} />
+      <Hero status={status} />
       <Anatomy />
       <DoubleTapSection />
       <HooksSection />

@@ -140,6 +140,23 @@ Then:
 | Merchant API | http://localhost:3002 | API key from `POST /admin/merchants` |
 | Grafana, Jaeger, Kafka UI | :3000, :16686, :8080 | |
 
+### Login credentials (local development stack)
+
+These are **development defaults**, safe only because the stack is on your own machine. The services refuse them when `NODE_ENV=production`.
+
+| Where | Username | Password / token |
+|---|---|---|
+| **Operator console** (http://localhost:3008/app, or the login page at `/login`) | `admin` | `zerodrift` |
+| **Demo shop** (http://localhost:3009) | none | none: you shop as an auto-created guest (`guest-xxxxxx`); click **+₹1,000.00** to add wallet funds |
+| **Admin API token** (header `x-admin-token`, used by scripts and the seed) | | `dev-admin-token` |
+| **Merchant API** (header `Authorization: Bearer <key>`) | | a key is created and shown **once** by `POST /admin/merchants` (the seed script prints two). Create your own: `curl -X POST localhost:3002/admin/merchants -H 'x-admin-token: dev-admin-token' -H 'content-type: application/json' -d '{"name":"My shop"}'` |
+| **Postgres** (localhost:55432) | `zerodrift` | `zerodrift` (databases `ledger`, `payments`, `webhook`, `reconciliation`, `gateway`) |
+| **Grafana** (:3000) | none | anonymous admin in the development stack |
+| Redis (:56379), Kafka (:9094), Kafka UI (:8080), Jaeger (:16686) | none | no authentication locally |
+
+To change the console login locally, start the stack with your own values: `DASHBOARD_PASSWORD='something-long' ADMIN_TOKEN='your-token' docker compose up -d`.
+In production none of these defaults work: you set every secret in `.env` (see [`.env.example`](.env.example) and [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)).
+
 Fill it with demo data (merchants, customers, 80 payments, duplicates, refunds, one payment whose bank answer is lost and then recovered):
 
 ```bash
