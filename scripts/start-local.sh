@@ -3,12 +3,14 @@
 #   pnpm start:local            build if needed, start, wait until every service is ready, seed demo data once, print URLs and logins
 #   BUILD=0 pnpm start:local    reuse the images you already built (much faster)
 #   SEED=force pnpm start:local add another batch of demo data   |   SEED=0 skips seeding
+#   FULL=1 pnpm start:local     also start Grafana, Prometheus, Jaeger and Kafka UI (about 1 GB more memory; off by default)
 #   pnpm stop:local             stop it (data is kept)
 set -uo pipefail
 cd "$(dirname "$0")/.."
 ADMIN_TOKEN="${ADMIN_TOKEN:-dev-admin-token}"
 
 if [ "${BUILD:-1}" = "0" ]; then ARGS="up -d"; else ARGS="up -d --build"; fi
+if [ -n "${FULL:-}" ]; then export OTEL_ENDPOINT=http://jaeger:4318; ARGS="--profile observability $ARGS"; fi
 echo "==> starting the stack (docker compose $ARGS)"
 for i in 1 2 3 4; do docker compose $ARGS && break || { echo "   attempt $i failed (network or Docker credentials?), retrying" >&2; sleep 6; }; done
 
@@ -39,7 +41,7 @@ Zerodrift is running.
   Operator console    http://localhost:3008/app        login: admin / zerodrift
   Demo shop           http://localhost:3009            no login: click "+₹1,000.00", add an item, Pay from wallet
   Chaos bench         http://localhost:3008/app/chaos  (inside the console)
-  Grafana / Jaeger    http://localhost:3000   http://localhost:16686
+  Grafana / Jaeger    only with FULL=1:  http://localhost:3000   http://localhost:16686
   Admin token         $ADMIN_TOKEN        (header x-admin-token)
 Manual test guide:    docs/MANUAL_TEST.md      Automated feature check: pnpm verify:features
 MSG

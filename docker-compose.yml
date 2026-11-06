@@ -1,4 +1,6 @@
-# Local stack. `docker compose up -d --build` starts everything.
+# Local stack. `docker compose up -d --build` starts the CORE (services, Postgres, Kafka, Redis, console, shop, chaos tools): about 1.5 GB.
+# Grafana, Prometheus, Jaeger and Kafka UI are optional and heavy: `OTEL_ENDPOINT=http://jaeger:4318 docker compose --profile observability up -d`
+# (or `FULL=1 pnpm start:local`). The console's Metrics page shows 'Prometheus is not reachable' without them, everything else works.
 name: zerodrift
 x-service: &service
   restart: unless-stopped
@@ -52,6 +54,7 @@ services:
 
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
+    profiles: ['observability']
     restart: unless-stopped
     ports: ['8080:8080']
     environment:
@@ -61,12 +64,14 @@ services:
 
   prometheus:
     image: prom/prometheus:latest
+    profiles: ['observability']
     restart: unless-stopped
     ports: ['9090:9090']
     volumes: ['./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro']
 
   grafana:
     image: grafana/grafana:latest
+    profiles: ['observability']
     restart: unless-stopped
     ports: ['3000:3000']
     environment:
@@ -80,6 +85,7 @@ services:
   # Distributed tracing UI + OTLP collector. Every service exports spans to it (OTEL_EXPORTER_OTLP_ENDPOINT).
   jaeger:
     image: jaegertracing/all-in-one:1.62.0
+    profiles: ['observability']
     restart: unless-stopped
     ports: ['16686:16686']
     environment: { COLLECTOR_OTLP_ENABLED: 'true' }
@@ -96,7 +102,7 @@ services:
     build: { context: ., args: { SERVICE: ledger } }
     ports: ['3001:3001']
     environment:
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_ENDPOINT:-}
       OTEL_SERVICE_NAME: ledger
       NODE_ENV: development
       DATABASE_URL: postgres://zerodrift:zerodrift@postgres:5432/ledger
@@ -113,7 +119,7 @@ services:
       toxiproxy: { condition: service_started }
       redis: { condition: service_healthy }
     environment:
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_ENDPOINT:-}
       OTEL_SERVICE_NAME: payments
       NODE_ENV: development
       DATABASE_URL: postgres://zerodrift:zerodrift@postgres:5432/payments
@@ -135,7 +141,7 @@ services:
       kafka: { condition: service_healthy }
       payments: { condition: service_started }
     environment:
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_ENDPOINT:-}
       OTEL_SERVICE_NAME: webhook
       NODE_ENV: development
       DATABASE_URL: postgres://zerodrift:zerodrift@postgres:5432/webhook
@@ -157,7 +163,7 @@ services:
       payments: { condition: service_started }
       mock-gateway: { condition: service_started }
     environment:
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_ENDPOINT:-}
       OTEL_SERVICE_NAME: reconciliation
       NODE_ENV: development
       DATABASE_URL: postgres://zerodrift:zerodrift@postgres:5432/reconciliation
@@ -176,7 +182,7 @@ services:
     ports: ['3005:3005']
     depends_on: { postgres: { condition: service_healthy } }
     environment:
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_ENDPOINT:-}
       OTEL_SERVICE_NAME: mock-gateway
       NODE_ENV: development
       DATABASE_URL: postgres://zerodrift:zerodrift@postgres:5432/gateway
@@ -212,7 +218,7 @@ services:
     ports: ['3008:3008']
     depends_on: [ledger, payments, webhook, reconciliation]
     environment:
-      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_ENDPOINT:-}
       OTEL_SERVICE_NAME: dashboard-api
       NODE_ENV: development
       ADMIN_TOKEN: ${ADMIN_TOKEN:-dev-admin-token}

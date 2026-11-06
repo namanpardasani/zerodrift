@@ -49,7 +49,7 @@ pnpm start:local          # builds if needed, starts everything, waits until it 
 - [ ] **Webhooks:** the delivery list and stats. Click a delivery: the **attempts drawn to scale** (dots on a line, the gaps are the real waiting times) and the attempt log; press **Replay**: a new attempt appears.
 - [ ] **Reconciliation:** press **Run internal**, then **Run external**: both finish **clean**. Select a run to see its report.
 - [ ] **Audit log:** who did what (merchant created, payment created, top-ups, recovery runs...). It is append-only.
-- [ ] **Metrics:** needs Prometheus (included in the local stack); numbers fill in after a minute.
+- [ ] **Metrics:** needs Prometheus, which is optional and not started by default (`FULL=1 pnpm start:local` adds it, plus Grafana and Jaeger). Without it the page says "Prometheus is not reachable", which is expected.
 - [ ] **Settings:** who you are, services up with latency.
 - [ ] A bad address (`/app/nothing`, `/nothing`) shows "this account doesn't exist in the books." with a way back.
 - [ ] Phone width: a slim top bar with a menu button that opens a two-column sheet of every page.
@@ -108,7 +108,8 @@ The local stack has a demo receiver (http://localhost:3007/received lists everyt
 
 | Symptom | Fix |
 |---|---|
-| A page shows errors, or "status unavailable" | Docker restarted and the database stopped: `docker compose up -d` (the stack now restarts itself, but a full Docker restart can still need this) |
+| A page shows errors, or "status unavailable" | Docker restarted and some containers did not come back: `docker compose up -d` (a few containers with mounted files can fail once right after a Docker restart; this starts them) |
+| Docker itself hangs or crashes | The machine is out of memory: the core stack needs about 1.5 GB; close heavy apps, avoid `FULL=1`, restart Docker Desktop |
 | `pnpm start:local` says NOT READY | `docker compose logs --tail=50 <service>`; most often a port is taken (3001 to 3009, 55432, 56379) |
 | You want a clean slate | `docker compose down -v` then `pnpm start:local` (this deletes the local data) |
 | The console shows old design | Rebuild the console image: `docker compose up -d --build dashboard-api` |
