@@ -115,8 +115,8 @@ for (const [title, text, name] of pages) {
 
 // a ledger transaction opened into its journal (ink rows, bracket, BALANCED stamp)
 await page.click('nav[aria-label=Main] >> text="Ledger"');
-await page.waitForSelector('button[aria-expanded]');
-await page.locator('button[aria-expanded]').first().click();
+await page.waitForSelector('main button[aria-expanded]');
+await page.locator('main button[aria-expanded]').first().click();
 try {
   await page.waitForSelector('text=balanced', { timeout: 10_000 });
   await page.waitForTimeout(SHOTS ? 4000 : 1500);

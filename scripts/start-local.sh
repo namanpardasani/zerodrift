@@ -14,13 +14,17 @@ if [ -n "${FULL:-}" ]; then export OTEL_ENDPOINT=http://jaeger:4318; ARGS="--pro
 echo "==> starting the stack (docker compose $ARGS)"
 for i in 1 2 3 4; do docker compose $ARGS && break || { echo "   attempt $i failed (network or Docker credentials?), retrying" >&2; sleep 6; }; done
 
+# After Docker (Desktop) restarts, the containers that mount config files from this folder (Postgres, Toxiproxy, the chaos controller)
+# can exit once with code 127 because the file share is not ready yet. Starting them again always works, so do it automatically.
+heal() { docker compose ps -a --format '{{.Service}} {{.State}}' | awk '$2=="exited"{print $1}' | xargs -r docker compose up -d >/dev/null 2>&1; }
+heal
 echo "==> waiting until every service is ready"
 SERVICES="ledger:3001 payments:3002 webhook:3003 reconciliation:3004 mock-gateway:3005 dashboard-api:3008 demo-shop:3009"
 for i in $(seq 1 90); do
   pending=""
   for s in $SERVICES; do curl -sf -m 3 "http://localhost:${s##*:}/ready" >/dev/null 2>&1 || pending="$pending ${s%%:*}"; done
   [ -z "$pending" ] && break
-  [ $((i % 5)) -eq 0 ] && echo "   still waiting for:$pending"
+  [ $((i % 5)) -eq 0 ] && { echo "   still waiting for:$pending"; heal; }
   sleep 3
 done
 if [ -n "$pending" ]; then echo "NOT READY:$pending  (see: docker compose logs --tail=50 <service>)" >&2; exit 1; fi
