@@ -287,3 +287,9 @@ and p99 about 11.5 to 14.3 s under 200 virtual users; transfer p50 about 0.9 to 
 - **Known open items (none block deploying):** the node-failure chaos test was never run (the 4-node cluster crashed Docker on a machine with a full C: drive; tooling is ready: `NODES=multi deploy/kind/up.sh`, then `NODE_FAILURE=1 pnpm chaos`); one chaos run's 759 s webhook stall is still unexplained (a plain consumer crash was measured at 10 to 13 s); the bank is a mock.
 - **Machine warning:** the user's C: drive hit 0 GB free once, which made Docker's runtime crash (bus error). Keep several GB free before building images.
 
+### Coming back after a long break (written 2026-11-08; the user planned to return in about 50 days)
+1. **Read first:** this "Where we stopped" section, `docs/DEPLOY_STEP_BY_STEP.md`, and the paste-ready coaching prompt `docs/GPT_DEPLOY_PROMPT.md`.
+2. **Re-check things that go stale:** the free-tier facts in `docs/DEPLOYMENT.md` (Azure for Students terms, Oracle Always Free limits, Neon/Upstash) were verified on 2026-10-31 and 2026-11-01 and change often; dependency versions and advisories (`pnpm audit:deps`); Docker image tags that float (`grafana:latest`, `prom/prometheus:latest`, `kafka-ui:latest`).
+3. **Machine hygiene:** check free space on C: (it hit 0 GB once and crashed Docker's runtime with a bus error). Then `pnpm install` and `pnpm start:local`; run `pnpm verify:features` (expects 46 of 46) before deploying.
+4. **Deploy** with the guide. It needs the user's own cloud account and a VM; nothing has been deployed or paid for.
+
